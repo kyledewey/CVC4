@@ -5,6 +5,7 @@
 #include "expr/command.h"
 #include "main/main.h"
 #include "main/command_executor.h"
+#include "util/exception.h"
 
 #include <string>
 #include <iostream>
@@ -16,6 +17,7 @@ using namespace CVC4::main;
 
 const string FILE_OR_INPUT_DELIMETER = "---FINISHED---";
 const string STDIN_FILENAME = "<stdin>";
+const string ERROR_DETECTED = "---ERROR DETECTED---";
 
 enum ReadLineResult {
   STREAM_COMPLETE,
@@ -33,10 +35,24 @@ public:
     parser->setInput(Input::newStringInput(options[options::inputLanguage],
 					   line,
 					   STDIN_FILENAME));
-    Command* command = parser->nextCommand();
-    //pExecutor = executor;
-    executor->doCommand(command);
-    delete command;
+    Command* command = NULL;
+
+    try {
+      command = parser->nextCommand();
+      if (!command) {
+	cout << endl << ERROR_DETECTED << endl;
+      } else {
+	if (!executor->doCommand(command)) {
+	  cout << endl << ERROR_DETECTED << endl;
+	}
+      }
+    } catch (Exception& exp) {
+      cout << endl << exp.what() << endl << ERROR_DETECTED << endl;
+    }
+
+    if (command) {
+      delete command;
+    }
   }
 
   ~CVC4Session() {
