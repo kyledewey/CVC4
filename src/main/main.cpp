@@ -68,26 +68,28 @@ private:
 
 class CVC4SessionFactory {
 public:
-  CVC4SessionFactory(Options& options, ExprManager& exprManager)
-    : options(options), exprManager(exprManager) {
-    parserBuilder = new ParserBuilder(&exprManager, STDIN_FILENAME);
+  CVC4SessionFactory(Options& options)
+    : options(options) {
+    exprManager = new ExprManager(options);
+    parserBuilder = new ParserBuilder(exprManager, STDIN_FILENAME);
     parserBuilder->withOptions(options);
     parserBuilder->withStringInput("");
   }
 
   CVC4Session* newSession() {
     return new CVC4Session(parserBuilder->build(),
-			   new CommandExecutor(exprManager, options),
+			   new CommandExecutor(*exprManager, options),
 			   options);
   }
 
   ~CVC4SessionFactory() {
     delete parserBuilder;
+    delete exprManager;
   }
 
 private:
   Options& options;
-  ExprManager& exprManager;
+  ExprManager* exprManager;
   ParserBuilder* parserBuilder;
 };
 
@@ -141,8 +143,8 @@ int main(int argc, char** argv) {
 
   //pOptions = &options;
   //cvc4_init();
-  ExprManager exprManager(options);
-  CVC4SessionFactory sessionFactory(options, exprManager);
+  //ExprManager exprManager(options);
+  CVC4SessionFactory sessionFactory(options);
   read_files(sessionFactory, cin);
 
   //delete options;
