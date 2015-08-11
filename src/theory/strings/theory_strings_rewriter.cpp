@@ -866,15 +866,15 @@ RewriteResponse TheoryStringsRewriter::postRewrite(TNode node) {
   } else if(node.getKind() == kind::STRING_LENGTH) {
     if(node[0].isConst()) {
       retNode = NodeManager::currentNM()->mkConst( ::CVC4::Rational( node[0].getConst<String>().size() ) );
-    } /*else if(node[0].getKind() == kind::STRING_SUBSTR_TOTAL) {
+    } else if(node[0].getKind() == kind::STRING_SUBSTR_TOTAL) {
         retNode = node[0][2];
-    }*/ else if(node[0].getKind() == kind::STRING_CONCAT) {
+    } else if(node[0].getKind() == kind::STRING_CONCAT) {
       Node tmpNode = rewriteConcatString(node[0]);
       if(tmpNode.isConst()) {
         retNode = NodeManager::currentNM()->mkConst( ::CVC4::Rational( tmpNode.getConst<String>().size() ) );
-      } /*else if(tmpNode.getKind() == kind::STRING_SUBSTR_TOTAL) {
-      retNode = tmpNode[2];
-      }*/ else {
+      } else if(tmpNode.getKind() == kind::STRING_SUBSTR_TOTAL) {
+        retNode = tmpNode[2];
+      } else {
         // it has to be string concat
         std::vector<Node> node_vec;
         for(unsigned int i=0; i<tmpNode.getNumChildren(); ++i) {
@@ -1115,6 +1115,9 @@ RewriteResponse TheoryStringsRewriter::postRewrite(TNode node) {
   }
 
   Trace("strings-postrewrite") << "Strings::postRewrite returning " << retNode << std::endl;
+  if( orig!=retNode ){
+    Trace("strings-rewrite-debug") << "Strings: post-rewrite " << orig << " to " << retNode << std::endl;
+  }
   return RewriteResponse(orig==retNode ? REWRITE_DONE : REWRITE_AGAIN_FULL, retNode);
 }
 
@@ -1291,5 +1294,8 @@ RewriteResponse TheoryStringsRewriter::preRewrite(TNode node) {
   }
 
   Trace("strings-prerewrite") << "Strings::preRewrite returning " << retNode << std::endl;
+  if( orig!=retNode ){
+    Trace("strings-rewrite-debug") << "Strings: pre-rewrite " << orig << " to " << retNode << std::endl;
+  }
   return RewriteResponse(orig==retNode ? REWRITE_DONE : REWRITE_AGAIN_FULL, retNode);
 }

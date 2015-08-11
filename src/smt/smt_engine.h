@@ -128,6 +128,10 @@ class CVC4_PUBLIC SmtEngine {
   typedef context::CDList<Expr> AssertionList;
   /** The type of our internal assignment set */
   typedef context::CDHashSet<Node, NodeHashFunction> AssignmentSet;
+  /** The types for the recursive function definitions */
+  typedef context::CDHashMap< Node, TypeNode, NodeHashFunction > TypeNodeMap;
+  typedef context::CDList<Node> NodeList;
+  typedef context::CDHashMap<Node, NodeList*, NodeHashFunction> NodeListMap;
 
   /** Expr manager context */
   context::Context* d_context;
@@ -151,6 +155,9 @@ class CVC4_PUBLIC SmtEngine {
   ProofManager* d_proofManager;
   /** An index of our defined functions */
   DefinedFunctionMap* d_definedFunctions;
+  /** recursive function definition abstractions for --fmf-fun */
+  TypeNodeMap* d_fmfRecFunctionsAbs;
+  NodeListMap* d_fmfRecFunctionsConcrete;
 
   /**
    * The assertion list (before any conversion) for supporting
@@ -189,9 +196,9 @@ class CVC4_PUBLIC SmtEngine {
    *A vector of command definitions to be imported in the new
    *SmtEngine when checking unsat-cores.
    */
-#ifdef CVC4_PROOF  
+#ifdef CVC4_PROOF
   std::vector<Command*> d_defineCommands;
-#endif   
+#endif
   /**
    * The logic we're in.
    */
@@ -455,6 +462,9 @@ public:
                       const std::vector<Expr>& formals,
                       Expr formula);
 
+  /** is defined function */
+  bool isDefinedFunction(Expr func);
+
   /**
    * Add a formula to the current context: preprocess, do per-theory
    * setup, use processAssertionList(), asserting to T-solver for
@@ -536,7 +546,7 @@ public:
    * Print solution for synthesis conjectures found by ce_guided_instantiation module
    */
   void printSynthSolution( std::ostream& out );
-  
+
   /**
    * Get an unsatisfiable core (only if immediately preceded by an
    * UNSAT or VALID query).  Only permitted if CVC4 was built with
@@ -707,7 +717,7 @@ public:
    * Set print function in model
    */
   void setPrintFuncInModel(Expr f, bool p);
-  
+
 };/* class SmtEngine */
 
 }/* CVC4 namespace */

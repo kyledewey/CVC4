@@ -37,6 +37,7 @@
 #include "theory/uf/theory_uf.h"
 #include "theory/quantifiers/full_model_check.h"
 #include "theory/quantifiers/ambqi_builder.h"
+#include "theory/quantifiers/fun_def_engine.h"
 
 using namespace std;
 using namespace CVC4;
@@ -169,6 +170,12 @@ d_lemmas_produced_c(u){
   }else{
     d_alpha_equiv = NULL;
   }
+  //if( options::funDefs() ){
+  //  d_fun_def_engine = new quantifiers::FunDefEngine( this, c );
+  //  d_modules.push_back( d_fun_def_engine );
+  //}else{
+  d_fun_def_engine = NULL;
+  //}
 
   if( needsBuilder ){
     Trace("quant-engine-debug") << "Initialize model engine, mbqi : " << options::mbqiMode() << " " << options::fmfBoundInt() << std::endl;
@@ -208,6 +215,7 @@ QuantifiersEngine::~QuantifiersEngine(){
   delete d_sg_gen;
   delete d_ceg_inst;
   delete d_lte_part_inst;
+  delete d_fun_def_engine;
   for(std::map< Node, QuantPhaseReq* >::iterator i = d_phase_reqs.begin(); i != d_phase_reqs.end(); ++i) {
     delete (*i).second;
   }
@@ -304,6 +312,7 @@ void QuantifiersEngine::check( Theory::Effort e ){
         Trace("quant-engine-debug") << "  lemmas waiting = " << d_lemmas_waiting.size() << std::endl;
       }
       Trace("quant-engine-debug") << "  Theory engine finished : " << !d_te->needCheck() << std::endl;
+      Trace("quant-engine-debug") << "  Needs model effort : " << needsModelE << std::endl;
       Trace("quant-engine-debug") << "Resetting all modules..." << std::endl;
     }
     if( Trace.isOn("quant-engine-ee") ){
@@ -536,6 +545,7 @@ void QuantifiersEngine::assertQuantifier( Node f, bool pol ){
       for( int i=0; i<(int)d_modules.size(); i++ ){
         d_modules[i]->assertNode( f );
       }
+      addTermToDatabase( d_term_db->getInstConstantBody( f ), true );
     }
   }
 }
@@ -589,15 +599,21 @@ void QuantifiersEngine::computeTermVector( Node f, InstMatch& m, std::vector< No
   }
 }
 
-bool QuantifiersEngine::addInstantiation( Node f, std::vector< Node >& vars, std::vector< Node >& terms ){
+bool QuantifiersEngine::addInstantiation( Node f, std::vector< Node >& vars, std::vector< Node >& terms, bool doVts ){
   Assert( f.getKind()==FORALL );
   Assert( vars.size()==terms.size() );
   Node body = getInstantiation( f, vars, terms );
+  //do virtual term substitution
+  if( doVts ){
+    body = Rewriter::rewrite( body );
+    Trace("inst-debug") << "Rewrite vts symbols in " << body << std::endl;
+    Node body_r = d_term_db->rewriteVtsSymbols( body );
+    Trace("inst-debug") << "            ...result: " << body_r << std::endl;
+    body = body_r;
+  }
   Trace("inst-assert") << "(assert " << body << ")" << std::endl;
   //make the lemma
-  NodeBuilder<> nb(kind::OR);
-  nb << f.notNode() << body;
-  Node lem = nb;
+  Node lem = NodeManager::currentNM()->mkNode( kind::OR, f.negate(), body );
   //check for duplication
   if( addLemma( lem ) ){
     d_total_inst_debug[f]++;
@@ -744,6 +760,7 @@ Node QuantifiersEngine::getInstantiation( Node f, InstMatch& m ){
 }
 
 Node QuantifiersEngine::getInstantiation( Node f, std::vector< Node >& terms ) {
+  d_term_db->makeInstantiationConstantsFor( f );
   return getInstantiation( f, d_term_db->d_inst_constants[f], terms );
 }
 
@@ -794,13 +811,13 @@ void QuantifiersEngine::addRequirePhase( Node lit, bool req ){
   d_phase_req_waiting[lit] = req;
 }
 
-bool QuantifiersEngine::addInstantiation( Node f, InstMatch& m, bool mkRep, bool modEq, bool modInst ){
+bool QuantifiersEngine::addInstantiation( Node f, InstMatch& m, bool mkRep, bool modEq, bool modInst, bool doVts ){
   std::vector< Node > terms;
   m.getTerms( this, f, terms );
-  return addInstantiation( f, terms, mkRep, modEq, modInst );
+  return addInstantiation( f, terms, mkRep, modEq, modInst, doVts );
 }
 
-bool QuantifiersEngine::addInstantiation( Node f, std::vector< Node >& terms, bool mkRep, bool modEq, bool modInst ) {
+bool QuantifiersEngine::addInstantiation( Node f, std::vector< Node >& terms, bool mkRep, bool modEq, bool modInst, bool doVts ) {
   // For resource-limiting (also does a time check).
   getOutputChannel().safePoint(options::quantifierStep());
 
@@ -864,7 +881,7 @@ bool QuantifiersEngine::addInstantiation( Node f, std::vector< Node >& terms, bo
 
   //add the instantiation
   Trace("inst-add-debug") << "Constructing instantiation..." << std::endl;
-  bool addedInst = addInstantiation( f, d_term_db->d_vars[f], terms );
+  bool addedInst = addInstantiation( f, d_term_db->d_vars[f], terms, doVts );
   //report the result
   if( addedInst ){
     Trace("inst-add-debug") << " -> Success." << std::endl;

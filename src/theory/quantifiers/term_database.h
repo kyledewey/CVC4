@@ -145,6 +145,9 @@ public:
   /** boolean terms */
   Node d_true;
   Node d_false;
+  /** constants */
+  Node d_zero;
+  Node d_one;
   /** ground terms */
   unsigned getNumGroundTerms( Node f );
   /** count number of non-redundant ground terms per operator */
@@ -352,6 +355,20 @@ public:
   /** get canonical term */
   Node getCanonicalTerm( TNode n, bool apply_torder = false );
 
+//for virtual term substitution
+private:
+  Node d_vts_delta;
+  Node d_vts_inf;
+  Node d_vts_delta_free;
+  Node d_vts_inf_free;
+public:
+  /** get vts delta */
+  Node getVtsDelta( bool isFree = false, bool create = true );
+  /** get vts infinity */
+  Node getVtsInfinity( bool isFree = false, bool create = true );
+  /** rewrite delta */
+  Node rewriteVtsSymbols( Node n );
+
 //general utilities
 public:
   /** simple check for contains term */
@@ -433,7 +450,7 @@ public:
   bool getMatch( Node n, TypeNode st, int& index_found, std::vector< Node >& args, int index_exc = -1, int index_start = 0 );
 private:
   //information for sygus types
-  std::map< TypeNode, TypeNode > d_register;  //stores sygus type
+  std::map< TypeNode, TypeNode > d_register;  //stores sygus -> builtin type
   std::map< TypeNode, std::map< int, Kind > > d_arg_kind;
   std::map< TypeNode, std::map< Kind, int > > d_kinds;
   std::map< TypeNode, std::map< int, Node > > d_arg_const;
@@ -455,6 +472,7 @@ private:
 public:
   TermDbSygus();
   bool isRegistered( TypeNode tn );
+  TypeNode sygusToBuiltinType( TypeNode tn );
   int getKindArg( TypeNode tn, Kind k );
   int getConstArg( TypeNode tn, Node n );
   int getOpArg( TypeNode tn, Node n );
@@ -485,7 +503,7 @@ public:
   Node getTypeValueOffset( TypeNode tn, Node val, int offset, int& status );
   /** get value */
   Node getTypeMaxValue( TypeNode tn );
-  TypeNode getSygusType( Node v );
+  TypeNode getSygusTypeForVar( Node v );
   Node mkGeneric( const Datatype& dt, int c, std::map< TypeNode, int >& var_count, std::map< int, Node >& pre );
   Node sygusToBuiltin( Node n, TypeNode tn );
   Node builtinToSygusConst( Node c, TypeNode tn, int rcons_depth = 0 );
@@ -500,6 +518,8 @@ public:
   Kind getComparisonKind( TypeNode tn );
   Kind getPlusKind( TypeNode tn, bool is_neg = false );
   bool doCompare( Node a, Node b, Kind k );
+  /** get operator kind */
+  static Kind getOperatorKind( Node op );
   /** print sygus term */
   static void printSygusTerm( std::ostream& out, Node n, std::vector< Node >& lvs );
 };

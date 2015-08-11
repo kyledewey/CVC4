@@ -93,6 +93,7 @@ namespace quantifiers {
   class CegInstantiation;
   class LtePartialInst;
   class AlphaEquivalence;
+  class FunDefEngine;
 }/* CVC4::theory::quantifiers */
 
 namespace inst {
@@ -142,6 +143,8 @@ private:
   quantifiers::CegInstantiation * d_ceg_inst;
   /** lte partial instantiation */
   quantifiers::LtePartialInst * d_lte_part_inst;
+  /** function definitions engine */
+  quantifiers::FunDefEngine * d_fun_def_engine;
 public: //effort levels
   enum {
     QEFFORT_CONFLICT,
@@ -228,6 +231,8 @@ public:  //modules
   quantifiers::CegInstantiation * getCegInstantiation() { return d_ceg_inst; }
   /** local theory ext partial inst */
   quantifiers::LtePartialInst * getLtePartialInst() { return d_lte_part_inst; }
+  /** function definition engine */
+  quantifiers::FunDefEngine * getFunDefEngine() { return d_fun_def_engine; }
 private:
   /** owner of quantified formulas */
   std::map< Node, QuantifiersModule * > d_owner;
@@ -259,7 +264,7 @@ private:
   /** compute term vector */
   void computeTermVector( Node f, InstMatch& m, std::vector< Node >& vars, std::vector< Node >& terms );
   /** instantiate f with arguments terms */
-  bool addInstantiation( Node f, std::vector< Node >& vars, std::vector< Node >& terms );
+  bool addInstantiation( Node f, std::vector< Node >& vars, std::vector< Node >& terms, bool doVts = false );
   /** set instantiation level attr */
   static void setInstantiationLevelAttr( Node n, Node qn, uint64_t level );
   /** flush lemmas */
@@ -278,9 +283,9 @@ public:
   /** add require phase */
   void addRequirePhase( Node lit, bool req );
   /** do instantiation specified by m */
-  bool addInstantiation( Node f, InstMatch& m, bool mkRep = true, bool modEq = false, bool modInst = false );
+  bool addInstantiation( Node f, InstMatch& m, bool mkRep = true, bool modEq = false, bool modInst = false, bool doVts = false );
   /** add instantiation */
-  bool addInstantiation( Node f, std::vector< Node >& terms, bool mkRep = true, bool modEq = false, bool modInst = false );
+  bool addInstantiation( Node f, std::vector< Node >& terms, bool mkRep = true, bool modEq = false, bool modInst = false, bool doVts = false );
   /** split on node n */
   bool addSplit( Node n, bool reqPhase = false, bool reqPhasePol = true );
   /** add split equality */
