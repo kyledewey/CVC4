@@ -248,14 +248,6 @@ public:
       instantiation.
    */
   Node getInstConstantNode( Node n, Node f );
-  /** same as before but node f is just linked to the new pattern by the
-      applied attribute
-      vars the bind variable
-      nvars the same variable but with an attribute
-  */
-  Node convertNodeToPattern( Node n, Node f,
-                             const std::vector<Node> & vars,
-                             const std::vector<Node> & nvars);
 
   static Node getInstConstAttr( Node n );
   static bool hasInstConstAttr( Node n );
@@ -306,18 +298,16 @@ public:
 //for triggers
 private:
   /** helper function for compute var contains */
-  void computeVarContains2( Node n, Node parent );
-  /** var contains */
-  std::map< TNode, std::vector< TNode > > d_var_contains;
+  void computeVarContains2( Node n, std::vector< Node >& varContains, std::map< Node, bool >& visited );
   /** triggers for each operator */
   std::map< Node, std::vector< inst::Trigger* > > d_op_triggers;
   /** helper for is instance of */
   bool isUnifiableInstanceOf( Node n1, Node n2, std::map< Node, Node >& subs );
+  /** -1: n1 is an instance of n2, 1: n1 is an instance of n2 */
+  int isInstanceOf2( Node n1, Node n2, std::vector< Node >& varContains1, std::vector< Node >& varContains2 );
 public:
   /** compute var contains */
-  void computeVarContains( Node n );
-  /** variables subsume, return true if n1 contains all free variables in n2 */
-  bool isVariableSubsume( Node n1, Node n2 );
+  void computeVarContains( Node n, std::vector< Node >& varContains );
   /** get var contains for each of the patterns in pats */
   void getVarContains( Node f, std::vector< Node >& pats, std::map< Node, std::vector< Node > >& varContains );
   /** get var contains for node n */
@@ -358,21 +348,39 @@ public:
 //for virtual term substitution
 private:
   Node d_vts_delta;
-  Node d_vts_inf;
+  std::map< TypeNode, Node > d_vts_inf;
   Node d_vts_delta_free;
-  Node d_vts_inf_free;
+  std::map< TypeNode, Node > d_vts_inf_free;
+  /** get vts infinity index */
+  Node getVtsInfinityIndex( int i, bool isFree = false, bool create = true  );
+  /** substitute vts free terms */
+  Node substituteVtsFreeTerms( Node n );
 public:
   /** get vts delta */
   Node getVtsDelta( bool isFree = false, bool create = true );
   /** get vts infinity */
-  Node getVtsInfinity( bool isFree = false, bool create = true );
+  Node getVtsInfinity( TypeNode tn, bool isFree = false, bool create = true );
+  /** get all vts terms */
+  void getVtsTerms( std::vector< Node >& t, bool isFree = false, bool create = true, bool inc_delta = true );
   /** rewrite delta */
   Node rewriteVtsSymbols( Node n );
-
+  /** simple check for contains term */
+  bool containsVtsTerm( Node n, bool isFree = false );
+  /** simple check for contains term */
+  bool containsVtsTerm( std::vector< Node >& n, bool isFree = false );
+  /** simple check for contains term */
+  bool containsVtsInfinity( Node n, bool isFree = false );
+  
+private:
+  //helper for contains term
+  static bool containsTerm2( Node n, Node t, std::map< Node, bool >& visited );
+  static bool containsTerms2( Node n, std::vector< Node >& t, std::map< Node, bool >& visited );
 //general utilities
 public:
   /** simple check for contains term */
   static bool containsTerm( Node n, Node t );
+  /** simple check for contains term */
+  static bool containsTerms( Node n, std::vector< Node >& t );
   /** simple negate */
   static Node simpleNegate( Node n );
   /** is assoc */

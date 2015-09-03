@@ -53,6 +53,8 @@ public:
   QuantifiersEngine* getQuantifiersEngine() { return d_quantEngine; }
   /** initialize */
   virtual void finishInit() {}
+  /** presolve */
+  virtual void presolve() {}
   /* whether this module needs to check this round */
   virtual bool needsCheck( Theory::Effort e ) { return e>=Theory::EFFORT_LAST_CALL; }
   /* whether this module needs a model built */
@@ -94,6 +96,7 @@ namespace quantifiers {
   class LtePartialInst;
   class AlphaEquivalence;
   class FunDefEngine;
+  class QuantEqualityEngine;
 }/* CVC4::theory::quantifiers */
 
 namespace inst {
@@ -145,6 +148,8 @@ private:
   quantifiers::LtePartialInst * d_lte_part_inst;
   /** function definitions engine */
   quantifiers::FunDefEngine * d_fun_def_engine;
+  /** quantifiers equality engine */
+  quantifiers::QuantEqualityEngine * d_uee;
 public: //effort levels
   enum {
     QEFFORT_CONFLICT,
@@ -233,6 +238,8 @@ public:  //modules
   quantifiers::LtePartialInst * getLtePartialInst() { return d_lte_part_inst; }
   /** function definition engine */
   quantifiers::FunDefEngine * getFunDefEngine() { return d_fun_def_engine; }
+  /** quantifiers equality engine */
+  quantifiers::QuantEqualityEngine * getQuantEqualityEngine() { return d_uee; }
 private:
   /** owner of quantified formulas */
   std::map< Node, QuantifiersModule * > d_owner;
@@ -246,6 +253,8 @@ public:
 public:
   /** initialize */
   void finishInit();
+  /** presolve */
+  void presolve();
   /** check at level */
   void check( Theory::Effort e );
   /** register quantifier */

@@ -753,7 +753,6 @@ int TermDb::getNumInstantiationConstants( Node f ) const {
 Node TermDb::getInstConstantBody( Node f ){
   std::map< Node, Node >::iterator it = d_inst_const_body.find( f );
   if( it==d_inst_const_body.end() ){
-    makeInstantiationConstantsFor( f );
     Node n = getInstConstantNode( f[1], f );
     d_inst_const_body[ f ] = n;
     return n;
@@ -783,15 +782,9 @@ Node TermDb::getCounterexampleLiteral( Node f ){
 }
 
 Node TermDb::getInstConstantNode( Node n, Node f ){
-  Assert( d_inst_constants.find( f )!=d_inst_constants.end() );
-  return convertNodeToPattern(n,f,d_vars[f],d_inst_constants[ f ]);
-}
-
-Node TermDb::convertNodeToPattern( Node n, Node f, const std::vector<Node> & vars,
-                                              const std::vector<Node> & inst_constants){
-  Node n2 = n.substitute( vars.begin(), vars.end(),
-                          inst_constants.begin(),
-                          inst_constants.end() );
+  makeInstantiationConstantsFor( f );
+  Node n2 = n.substitute( d_vars[f].begin(), d_vars[f].end(),
+                          d_inst_constants[f].begin(), d_inst_constants[f].end() );
   return n2;
 }
 
@@ -1001,66 +994,47 @@ Node TermDb::getFreeVariableForType( TypeNode tn ) {
   return d_free_vars[tn];
 }
 
-void TermDb::computeVarContains( Node n ) {
-  if( d_var_contains.find( n )==d_var_contains.end() ){
-    d_var_contains[n].clear();
-    computeVarContains2( n, n );
-  }
+void TermDb::computeVarContains( Node n, std::vector< Node >& varContains ) {
+  std::map< Node, bool > visited;
+  computeVarContains2( n, varContains, visited );
 }
 
-void TermDb::computeVarContains2( Node n, Node parent ){
-  if( n.getKind()==INST_CONSTANT ){
-    if( std::find( d_var_contains[parent].begin(), d_var_contains[parent].end(), n )==d_var_contains[parent].end() ){
-      d_var_contains[parent].push_back( n );
-    }
-  }else{
-    for( int i=0; i<(int)n.getNumChildren(); i++ ){
-      computeVarContains2( n[i], parent );
-    }
-  }
-}
-
-bool TermDb::isVariableSubsume( Node n1, Node n2 ){
-  if( n1==n2 ){
-    return true;
-  }else{
-    //Notice() << "is variable subsume ? " << n1 << " " << n2 << std::endl;
-    computeVarContains( n1 );
-    computeVarContains( n2 );
-    for( int i=0; i<(int)d_var_contains[n2].size(); i++ ){
-      if( std::find( d_var_contains[n1].begin(), d_var_contains[n1].end(), d_var_contains[n2][i] )==d_var_contains[n1].end() ){
-        //Notice() << "no" << std::endl;
-        return false;
+void TermDb::computeVarContains2( Node n, std::vector< Node >& varContains, std::map< Node, bool >& visited ){
+  if( visited.find( n )==visited.end() ){
+    visited[n] = true;
+    if( n.getKind()==INST_CONSTANT ){
+      if( std::find( varContains.begin(), varContains.end(), n )==varContains.end() ){
+        varContains.push_back( n );
+      }
+    }else{
+      for( unsigned i=0; i<n.getNumChildren(); i++ ){
+        computeVarContains2( n[i], varContains, visited );
       }
     }
-    //Notice() << "yes" << std::endl;
-    return true;
   }
 }
 
 void TermDb::getVarContains( Node f, std::vector< Node >& pats, std::map< Node, std::vector< Node > >& varContains ){
-  for( int i=0; i<(int)pats.size(); i++ ){
-    computeVarContains( pats[i] );
+  for( unsigned i=0; i<pats.size(); i++ ){
     varContains[ pats[i] ].clear();
-    for( int j=0; j<(int)d_var_contains[pats[i]].size(); j++ ){
-      if( d_var_contains[pats[i]][j].getAttribute(InstConstantAttribute())==f ){
-        varContains[ pats[i] ].push_back( d_var_contains[pats[i]][j] );
+    getVarContainsNode( f, pats[i], varContains[ pats[i] ] );
+  }
+}
+
+void TermDb::getVarContainsNode( Node f, Node n, std::vector< Node >& varContains ){
+  std::vector< Node > vars;
+  computeVarContains( n, vars );  
+  for( unsigned j=0; j<vars.size(); j++ ){
+    Node v = vars[j];
+    if( v.getAttribute(InstConstantAttribute())==f ){
+      if( std::find( varContains.begin(), varContains.end(), v )==varContains.end() ){
+        varContains.push_back( v );
       }
     }
   }
 }
 
-void TermDb::getVarContainsNode( Node f, Node n, std::vector< Node >& varContains ){
-  computeVarContains( n );
-  for( int j=0; j<(int)d_var_contains[n].size(); j++ ){
-    if( d_var_contains[n][j].getAttribute(InstConstantAttribute())==f ){
-      varContains.push_back( d_var_contains[n][j] );
-    }
-  }
-}
-
-/** is n1 an instance of n2 or vice versa? */
-int TermDb::isInstanceOf( Node n1, Node n2 ){
+int TermDb::isInstanceOf2( Node n1, Node n2, std::vector< Node >& varContains1, std::vector< Node >& varContains2 ){
   if( n1==n2 ){
     return 1;
   }else if( n1.getKind()==n2.getKind() ){
@@ -1069,7 +1043,7 @@ int TermDb::isInstanceOf( Node n1, Node n2 ){
         int result = 0;
         for( int i=0; i<(int)n1.getNumChildren(); i++ ){
           if( n1[i]!=n2[i] ){
-            int cResult = isInstanceOf( n1[i], n2[i] );
+            int cResult = isInstanceOf2( n1[i], n2[i], varContains1, varContains2 );
             if( cResult==0 ){
               return 0;
             }else if( cResult!=result ){
@@ -1086,23 +1060,29 @@ int TermDb::isInstanceOf( Node n1, Node n2 ){
     }
     return 0;
   }else if( n2.getKind()==INST_CONSTANT ){
-    computeVarContains( n1 );
     //if( std::find( d_var_contains[ n1 ].begin(), d_var_contains[ n1 ].end(), n2 )!=d_var_contains[ n1 ].end() ){
     //  return 1;
     //}
-    if( d_var_contains[ n1 ].size()==1 && d_var_contains[ n1 ][ 0 ]==n2 ){
+    if( varContains1.size()==1 && varContains1[ 0 ]==n2 ){
       return 1;
     }
   }else if( n1.getKind()==INST_CONSTANT ){
-    computeVarContains( n2 );
     //if( std::find( d_var_contains[ n2 ].begin(), d_var_contains[ n2 ].end(), n1 )!=d_var_contains[ n2 ].end() ){
     //  return -1;
     //}
-    if( d_var_contains[ n2 ].size()==1 && d_var_contains[ n2 ][ 0 ]==n1 ){
+    if( varContains2.size()==1 && varContains2[ 0 ]==n1 ){
       return 1;
     }
   }
   return 0;
+}
+
+int TermDb::isInstanceOf( Node n1, Node n2 ){
+  std::vector< Node > varContains1;
+  std::vector< Node > varContains2;
+  computeVarContains( n1, varContains1 );
+  computeVarContains( n1, varContains2 );
+  return isInstanceOf2( n1, n2, varContains1, varContains2 );
 }
 
 bool TermDb::isUnifiableInstanceOf( Node n1, Node n2, std::map< Node, Node >& subs ){
@@ -1136,10 +1116,14 @@ bool TermDb::isUnifiableInstanceOf( Node n1, Node n2, std::map< Node, Node >& su
 void TermDb::filterInstances( std::vector< Node >& nodes ){
   std::vector< bool > active;
   active.resize( nodes.size(), true );
-  for( int i=0; i<(int)nodes.size(); i++ ){
-    for( int j=i+1; j<(int)nodes.size(); j++ ){
+  std::map< int, std::vector< Node > > varContains;
+  for( unsigned i=0; i<nodes.size(); i++ ){
+    computeVarContains( nodes[i], varContains[i] );
+  }   
+  for( unsigned i=0; i<nodes.size(); i++ ){
+    for( unsigned j=i+1; j<nodes.size(); j++ ){
       if( active[i] && active[j] ){
-        int result = isInstanceOf( nodes[i], nodes[j] );
+        int result = isInstanceOf2( nodes[i], nodes[j], varContains[i], varContains[j] );
         if( result==1 ){
           Trace("filter-instances") << nodes[j] << " is an instance of " << nodes[i] << std::endl;
           active[j] = false;
@@ -1151,7 +1135,7 @@ void TermDb::filterInstances( std::vector< Node >& nodes ){
     }
   }
   std::vector< Node > temp;
-  for( int i=0; i<(int)nodes.size(); i++ ){
+  for( unsigned i=0; i<nodes.size(); i++ ){
     if( active[i] ){
       temp.push_back( nodes[i] );
     }
@@ -1310,11 +1294,25 @@ Node TermDb::getCanonicalTerm( TNode n, bool apply_torder ){
   return getCanonicalTerm( n, var_count, subs, apply_torder );
 }
 
+void TermDb::getVtsTerms( std::vector< Node >& t, bool isFree, bool create, bool inc_delta ) {
+  if( inc_delta ){
+    Node delta = getVtsDelta( isFree, create );
+    if( !delta.isNull() ){
+      t.push_back( delta );
+    }
+  }
+  for( unsigned r=0; r<2; r++ ){
+    Node inf = getVtsInfinityIndex( r, isFree, create );
+    if( !inf.isNull() ){
+      t.push_back( inf );
+    }
+  }
+}
 
 Node TermDb::getVtsDelta( bool isFree, bool create ) {
   if( create ){
     if( d_vts_delta_free.isNull() ){
-      d_vts_delta_free = NodeManager::currentNM()->mkSkolem( "delta", NodeManager::currentNM()->realType(), "free delta for virtual term substitution" );
+      d_vts_delta_free = NodeManager::currentNM()->mkSkolem( "delta_free", NodeManager::currentNM()->realType(), "free delta for virtual term substitution" );
       Node delta_lem = NodeManager::currentNM()->mkNode( GT, d_vts_delta_free, NodeManager::currentNM()->mkConst( Rational( 0 ) ) );
       d_quantEngine->getOutputChannel().lemma( delta_lem );
     }
@@ -1325,87 +1323,127 @@ Node TermDb::getVtsDelta( bool isFree, bool create ) {
   return isFree ? d_vts_delta_free : d_vts_delta;
 }
 
-Node TermDb::getVtsInfinity( bool isFree, bool create ) {
+Node TermDb::getVtsInfinity( TypeNode tn, bool isFree, bool create ) {
   if( create ){
-    if( d_vts_inf_free.isNull() ){
-      d_vts_inf_free = NodeManager::currentNM()->mkSkolem( "inf", NodeManager::currentNM()->realType(), "free infinity for virtual term substitution" );
+    if( d_vts_inf_free[tn].isNull() ){
+      d_vts_inf_free[tn] = NodeManager::currentNM()->mkSkolem( "inf_free", tn, "free infinity for virtual term substitution" );
     }
-    if( d_vts_inf.isNull() ){
-      d_vts_inf = NodeManager::currentNM()->mkSkolem( "inf", NodeManager::currentNM()->realType(), "infinity for virtual term substitution" );
+    if( d_vts_inf[tn].isNull() ){
+      d_vts_inf[tn] = NodeManager::currentNM()->mkSkolem( "inf", tn, "infinity for virtual term substitution" );
     }
   }
-  return isFree ? d_vts_inf_free : d_vts_inf;
+  return isFree ? d_vts_inf_free[tn] : d_vts_inf[tn];
+}
+
+Node TermDb::getVtsInfinityIndex( int i, bool isFree, bool create ) {
+  if( i==0 ){
+    return getVtsInfinity( NodeManager::currentNM()->realType(), isFree, create );
+  }else if( i==1 ){
+    return getVtsInfinity( NodeManager::currentNM()->integerType(), isFree, create );
+  }else{
+    Assert( false );
+    return Node::null();
+  }
+}
+
+Node TermDb::substituteVtsFreeTerms( Node n ) {
+  std::vector< Node > vars;
+  getVtsTerms( vars, false, false );
+  std::vector< Node > vars_free;
+  getVtsTerms( vars_free, true, false );
+  Assert( vars.size()==vars_free.size() );
+  if( !vars.empty() ){
+    return n.substitute( vars.begin(), vars.end(), vars_free.begin(), vars_free.end() );
+  }else{
+    return n;
+  }
 }
 
 Node TermDb::rewriteVtsSymbols( Node n ) {
   if( ( n.getKind()==EQUAL || n.getKind()==GEQ ) ){
     Trace("quant-vts-debug") << "VTS : process " << n << std::endl;
-    bool rew_inf = false;
+    Node rew_vts_inf;
     bool rew_delta = false;
-    if( !d_vts_inf.isNull() && containsTerm( n, d_vts_inf ) ){
-      rew_inf = true;
-    }else if( !d_vts_delta.isNull() && containsTerm( n, d_vts_delta ) ){
-      rew_delta = true;
-    }
-    if( rew_inf || rew_delta ){
-      if( n.getKind()==EQUAL ){
-        return d_false;
-      }else{
-        std::map< Node, Node > msum;
-        if( QuantArith::getMonomialSumLit( n, msum ) ){
-          if( Trace.isOn("quant-vts-debug") ){
-            Trace("quant-vts-debug") << "VTS got monomial sum : " << std::endl;
-            QuantArith::debugPrintMonomialSum( msum, "quant-vts-debug" );
+    //rewriting infinity always takes precedence over rewriting delta
+    for( unsigned r=0; r<2; r++ ){
+      Node inf = getVtsInfinityIndex( r, false, false );
+      if( !inf.isNull() && containsTerm( n, inf ) ){
+        if( rew_vts_inf.isNull() ){
+          rew_vts_inf = inf;
+        }else{
+          //for mixed int/real with multiple infinities
+          Trace("quant-vts-debug") << "Multiple infinities...equate " << inf << " = " << rew_vts_inf << std::endl;
+          std::vector< Node > subs_lhs;
+          subs_lhs.push_back( inf );
+          std::vector< Node > subs_rhs;
+          subs_lhs.push_back( rew_vts_inf );
+          n = n.substitute( subs_lhs.begin(), subs_lhs.end(), subs_rhs.begin(), subs_rhs.end() );
+          n = Rewriter::rewrite( n );
+          //may have cancelled
+          if( !containsTerm( n, rew_vts_inf ) ){
+            rew_vts_inf = Node::null();
           }
-          Node vts_sym = rew_inf ? d_vts_inf : d_vts_delta;
-          Node iso_n;
-          int res = QuantArith::isolate( vts_sym, msum, iso_n, n.getKind(), true );
-          if( res!=0 ){
-            Trace("quant-vts-debug") << "VTS isolated :  -> " << iso_n << ", res = " << res << std::endl;
-            int index = res==1 ? 0 : 1;
-            Node slv = iso_n[res==1 ? 1 : 0];
-            if( iso_n[index]!=vts_sym ){
-              if( iso_n[index].getKind()==MULT && iso_n[index].getNumChildren()==2 && iso_n[index][0].isConst() && iso_n[index][1]==d_vts_delta ){
-                slv = NodeManager::currentNM()->mkNode( MULT, slv, NodeManager::currentNM()->mkConst( Rational(1)/iso_n[index][0].getConst<Rational>() ) );
-              }else{
-                return n;
-              }
-            }
-            Node nlit;
-            if( res==1 ){
-              if( rew_inf ){
-                nlit = d_true;
-              }else{
-                nlit = NodeManager::currentNM()->mkNode( GEQ, d_zero, slv );
-              }
+        }
+      }
+    }
+    if( rew_vts_inf.isNull() ){
+      if( !d_vts_delta.isNull() && containsTerm( n, d_vts_delta ) ){
+        rew_delta = true;
+      }
+    }
+    if( !rew_vts_inf.isNull()  || rew_delta ){
+      std::map< Node, Node > msum;
+      if( QuantArith::getMonomialSumLit( n, msum ) ){
+        if( Trace.isOn("quant-vts-debug") ){
+          Trace("quant-vts-debug") << "VTS got monomial sum : " << std::endl;
+          QuantArith::debugPrintMonomialSum( msum, "quant-vts-debug" );
+        }
+        Node vts_sym = !rew_vts_inf.isNull() ? rew_vts_inf : d_vts_delta;
+        Assert( !vts_sym.isNull() );
+        Node iso_n;
+        Node nlit;
+        int res = QuantArith::isolate( vts_sym, msum, iso_n, n.getKind(), true );
+        if( res!=0 ){
+          Trace("quant-vts-debug") << "VTS isolated :  -> " << iso_n << ", res = " << res << std::endl;
+          Node slv = iso_n[res==1 ? 1 : 0];
+          //ensure the vts terms have been eliminated
+          if( containsVtsTerm( slv ) ){
+            Trace("quant-vts-warn") << "Bad vts literal : " << n << ", contains " << vts_sym << " but bad solved form " << slv << "." << std::endl;
+            nlit = substituteVtsFreeTerms( n );
+            Trace("quant-vts-debug") << "...return " << nlit << std::endl;
+            //Assert( false );
+            //safe case: just convert to free symbols
+            return nlit;
+          }else{
+            if( !rew_vts_inf.isNull() ){
+              nlit = ( n.getKind()==GEQ && res==1 ) ? d_true : d_false;
             }else{
-              if( rew_inf ){
+              Assert( iso_n[res==1 ? 0 : 1]==d_vts_delta );
+              if( n.getKind()==EQUAL ){
                 nlit = d_false;
+              }else if( res==1 ){
+                nlit = NodeManager::currentNM()->mkNode( GEQ, d_zero, slv );
               }else{
                 nlit = NodeManager::currentNM()->mkNode( GT, slv, d_zero );
               }
             }
-            Trace("quant-vts-debug") << "Return " << nlit << std::endl;
-            return nlit;
           }
+          Trace("quant-vts-debug") << "Return " << nlit << std::endl;
+          return nlit;
+        }else{
+          Trace("quant-vts-warn") << "Bad vts literal : " << n << ", contains " << vts_sym << " but could not isolate." << std::endl;
+          //safe case: just convert to free symbols
+          nlit = substituteVtsFreeTerms( n );
+          Trace("quant-vts-debug") << "...return " << nlit << std::endl;
+          //Assert( false );
+          return nlit;
         }
       }
     }
     return n;
   }else if( n.getKind()==FORALL ){
     //cannot traverse beneath quantifiers
-    std::vector< Node > vars;
-    std::vector< Node > vars_free;
-    if( !d_vts_inf.isNull() ){
-      vars.push_back( d_vts_inf );
-      vars_free.push_back( d_vts_inf_free );
-    }
-    if( !d_vts_delta.isNull() ){
-      vars.push_back( d_vts_delta );
-      vars_free.push_back( d_vts_delta_free );
-    }
-    n = n.substitute( vars.begin(), vars.end(), vars_free.begin(), vars_free.end() );
-    return n;
+    return substituteVtsFreeTerms( n );
   }else{
     bool childChanged = false;
     std::vector< Node > children;
@@ -1427,16 +1465,74 @@ Node TermDb::rewriteVtsSymbols( Node n ) {
   }
 }
 
-bool TermDb::containsTerm( Node n, Node t ) {
-  if( n==t ){
-    return true;
-  }else{
-    for( unsigned i=0; i<n.getNumChildren(); i++ ){
-      if( containsTerm( n[i], t ) ){
+bool TermDb::containsVtsTerm( Node n, bool isFree ) {
+  std::vector< Node > t;
+  getVtsTerms( t, isFree, false );
+  return containsTerms( n, t );
+}
+
+bool TermDb::containsVtsTerm( std::vector< Node >& n, bool isFree ) {
+  std::vector< Node > t;
+  getVtsTerms( t, isFree, false );
+  if( !t.empty() ){
+    for( unsigned i=0; i<n.size(); i++ ){
+      if( containsTerms( n[i], t ) ){
         return true;
       }
     }
+  }
+  return false;
+}
+
+bool TermDb::containsVtsInfinity( Node n, bool isFree ) {
+  std::vector< Node > t;
+  getVtsTerms( t, isFree, false, false );
+  return containsTerms( n, t );
+}
+
+bool TermDb::containsTerm2( Node n, Node t, std::map< Node, bool >& visited ) {
+  if( n==t ){
+    return true;
+  }else{
+    if( visited.find( n )==visited.end() ){
+      visited[n] = true;
+      for( unsigned i=0; i<n.getNumChildren(); i++ ){
+        if( containsTerm2( n[i], t, visited ) ){
+          return true;
+        }
+      }
+    }
     return false;
+  }
+}
+
+bool TermDb::containsTerms2( Node n, std::vector< Node >& t, std::map< Node, bool >& visited ) {
+  if( std::find( t.begin(), t.end(), n )!=t.end() ){
+    return true;
+  }else{
+    if( visited.find( n )==visited.end() ){
+      visited[n] = true;
+      for( unsigned i=0; i<n.getNumChildren(); i++ ){
+        if( containsTerms2( n[i], t, visited ) ){
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+}
+
+bool TermDb::containsTerm( Node n, Node t ) {
+  std::map< Node, bool > visited;
+  return containsTerm2( n, t, visited );
+}
+
+bool TermDb::containsTerms( Node n, std::vector< Node >& t ) {
+  if( t.empty() ){
+    return false;
+  }else{
+    std::map< Node, bool > visited;
+    return containsTerms2( n, t, visited );
   }
 }
 
@@ -1458,7 +1554,7 @@ bool TermDb::isAssoc( Kind k ) {
 }
 
 bool TermDb::isComm( Kind k ) {
-  return k==PLUS || k==MULT || k==AND || k==OR || k==XOR || k==IFF ||
+  return k==EQUAL || k==PLUS || k==MULT || k==AND || k==OR || k==XOR || k==IFF ||
          k==BITVECTOR_PLUS || k==BITVECTOR_MULT || k==BITVECTOR_AND || k==BITVECTOR_OR || k==BITVECTOR_XOR || k==BITVECTOR_XNOR;
 }
 
@@ -1470,7 +1566,8 @@ void TermDb::registerTrigger( theory::inst::Trigger* tr, Node op ){
 
 bool TermDb::isInductionTerm( Node n ) {
   if( options::dtStcInduction() && datatypes::DatatypesRewriter::isTermDatatype( n ) ){
-    return true;
+    const Datatype& dt = ((DatatypeType)(n.getType()).toType()).getDatatype();
+    return !dt.isCodatatype();
   }
   if( options::intWfInduction() && n.getType().isInteger() ){
     return true;
