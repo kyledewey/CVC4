@@ -236,35 +236,6 @@ Node TheoryModel::getDomainValue( TypeNode tn, std::vector< Node >& exclude ){
   return Node::null();
 }
 
-//FIXME: need to ensure that theory enumerators exist for each sort
-Node TheoryModel::getNewDomainValue( TypeNode tn ){
-  if( tn.isSort() ){
-    return Node::null();
-  }else{
-    TypeEnumerator te(tn);
-    while( !te.isFinished() ){
-      Node r = *te;
-      if(Debug.isOn("getNewDomainValue")) {
-        Debug("getNewDomainValue") << "getNewDomainValue( " << tn << ")" << endl;
-        Debug("getNewDomainValue") << "+ TypeEnumerator gave: " << r << endl;
-        Debug("getNewDomainValue") << "+ d_type_reps are:";
-        for(vector<Node>::const_iterator i = d_rep_set.d_type_reps[tn].begin();
-            i != d_rep_set.d_type_reps[tn].end();
-            ++i) {
-          Debug("getNewDomainValue") << " " << *i;
-        }
-        Debug("getNewDomainValue") << endl;
-      }
-      if( std::find(d_rep_set.d_type_reps[tn].begin(), d_rep_set.d_type_reps[tn].end(), r) ==d_rep_set.d_type_reps[tn].end() ) {
-        Debug("getNewDomainValue") << "+ it's new, so returning " << r << endl;
-        return r;
-      }
-      ++te;
-    }
-    return Node::null();
-  }
-}
-
 /** add substitution */
 void TheoryModel::addSubstitution( TNode x, TNode t, bool invalidateCache ){
   if( !d_substitutions.hasSubstitution( x ) ){
@@ -852,6 +823,9 @@ void TheoryEngineModelBuilder::buildModel(Model* m, bool fullModel)
         tm->d_reps[*i] = *i;
         tm->d_rep_set.add((*i).getType(), *i);
       }
+    }
+    for( std::map< TypeNode, std::vector< Node > >::iterator it = tm->d_rep_set.d_type_reps.begin(); it != tm->d_rep_set.d_type_reps.end(); ++it ){
+      tm->d_rep_set.d_type_rlv_rep[it->first] = (int)it->second.size();
     }
   }
 
