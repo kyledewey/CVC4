@@ -52,8 +52,11 @@ CommandExecutor::CommandExecutor(ExprManager &exprMgr, Options &options) :
   d_options(options),
   d_stats("driver"),
   d_result(),
-  d_replayStream(NULL)
-{}
+  d_replayStream(NULL) {
+  d_smtEngine->setOption("check-models", SExpr("true"));
+  d_smtEngine->setOption("produce-models", SExpr("true"));
+
+}
 
 void CommandExecutor::setReplayStream(ExprStream* replayStream) {
   assert(d_replayStream == NULL);
