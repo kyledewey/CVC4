@@ -55,6 +55,7 @@ using namespace CVC4::main;
 const string FILE_OR_INPUT_DELIMETER = "---FINISHED---";
 const string STDIN_FILENAME = "<stdin>";
 const string ERROR_DETECTED = "---ERROR DETECTED---";
+const string READY = "---READY---";
 
 enum ReadLineResult {
   STREAM_COMPLETE,
@@ -169,7 +170,9 @@ bool read_file_incrementally(CVC4SessionFactory& sessionFactory,
 
 void read_files(CVC4SessionFactory& sessionFactory,
 		istream& input) {
-  while (read_file_incrementally(sessionFactory, input)) {}
+  while (read_file_incrementally(sessionFactory, input)) {
+    cout << endl << READY << endl;
+  }
 }
 
 int main(int argc, char** argv) {
