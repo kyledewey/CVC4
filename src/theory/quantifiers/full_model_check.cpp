@@ -1,13 +1,13 @@
 /*********************                                                        */
 /*! \file full_model_check.cpp
  ** \verbatim
- ** Original author: Andrew Reynolds
- ** Major contributors: Morgan Deters
- ** Minor contributors (to current version): Kshitij Bansal
+ ** Top contributors (to current version):
+ **   Morgan Deters, Andrew Reynolds, Tim King
  ** This file is part of the CVC4 project.
- ** Copyright (c) 2009-2014  New York University and The University of Iowa
- ** See the file COPYING in the top-level source directory for licensing
- ** information.\endverbatim
+ ** Copyright (c) 2009-2016 by the authors listed in the file AUTHORS
+ ** in the top-level source directory) and their institutional affiliations.
+ ** All rights reserved.  See the file COPYING in the top-level source
+ ** directory for licensing information.\endverbatim
  **
  ** \brief Implementation of full model check class
  **/
@@ -461,7 +461,7 @@ void FullModelChecker::processBuildModel(TheoryModel* m, bool fullModel){
             }
           }
           if( !isStar && !ri.isConst() ){
-            Trace("fmc-warn") << "Warning : model has non-constant argument in model " << ri << " (from " << c[i] << ")" << std::endl;
+            Trace("fmc-warn") << "Warning : model for " << op << " has non-constant argument in model " << ri << " (from " << c[i] << ")" << std::endl;
             Assert( false );
           }
           entry_children.push_back(ri);
@@ -469,7 +469,7 @@ void FullModelChecker::processBuildModel(TheoryModel* m, bool fullModel){
         Node n = NodeManager::currentNM()->mkNode( APPLY_UF, children );
         Node nv = fm->getUsedRepresentative( v );
         if( !nv.isConst() ){
-          Trace("fmc-warn") << "Warning : model has non-constant value in model " << nv << std::endl;
+          Trace("fmc-warn") << "Warning : model for " << op << " has non-constant value in model " << nv << std::endl;
           Assert( false );
         }
         Node en = (useSimpleModels() && hasNonStar) ? n : NodeManager::currentNM()->mkNode( APPLY_UF, entry_children );
@@ -690,10 +690,12 @@ bool FullModelChecker::doExhaustiveInstantiation( FirstOrderModel * fm, Node f, 
                 }else{
                   Trace("fmc-debug-inst") << "** Instantiation was duplicate." << std::endl;
                   //this can happen if evaluation is unknown, or if we are generalizing a star that already has a value
-                  if( !hasStar && d_quant_models[f].d_value[i]==d_false ){
-                    Trace("fmc-warn") << "**** FMC warning: inconsistent duplicate instantiation." << std::endl;
-                  }
-                  Assert( hasStar || d_quant_models[f].d_value[i]!=d_false );
+                  //if( !hasStar && d_quant_models[f].d_value[i]==d_false ){
+                  //  Trace("fmc-warn") << "**** FMC warning: inconsistent duplicate instantiation." << std::endl;
+                  //}
+                  //this assertion can happen if two instantiations from this round are identical
+                  // (0,1)->false (1,0)->false   for   forall xy. f( x, y ) = f( y, x )
+                  //Assert( hasStar || d_quant_models[f].d_value[i]!=d_false );
                   //might try it next effort level
                   d_star_insts[f].push_back(i);
                 }
@@ -742,12 +744,14 @@ bool FullModelChecker::exhaustiveInstantiate(FirstOrderModelFmc * fm, Node f, No
   for( unsigned i=0; i<c.getNumChildren(); i++ ){
     if( c[i].getType().isInteger() ){
       if( fm->isInterval(c[i]) ){
+        Trace("fmc-exh-debug") << "...set " << i << " based on interval." << std::endl;
         for( unsigned b=0; b<2; b++ ){
           if( !fm->isStar(c[i][b]) ){
             riter.d_bounds[b][i] = c[i][b];
           }
         }
       }else if( !fm->isStar(c[i]) ){
+        Trace("fmc-exh-debug") << "...set " << i << " based on point." << std::endl;
         riter.d_bounds[0][i] = c[i];
         riter.d_bounds[1][i] = QuantArith::offset( c[i], 1 );
       }

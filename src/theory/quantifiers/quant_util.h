@@ -1,13 +1,13 @@
 /*********************                                                        */
 /*! \file quant_util.h
  ** \verbatim
- ** Original author: Andrew Reynolds
- ** Major contributors: Morgan Deters
- ** Minor contributors (to current version): none
+ ** Top contributors (to current version):
+ **   Morgan Deters, Andrew Reynolds, Tim King
  ** This file is part of the CVC4 project.
- ** Copyright (c) 2009-2014  New York University and The University of Iowa
- ** See the file COPYING in the top-level source directory for licensing
- ** information.\endverbatim
+ ** Copyright (c) 2009-2016 by the authors listed in the file AUTHORS
+ ** in the top-level source directory) and their institutional affiliations.
+ ** All rights reserved.  See the file COPYING in the top-level source
+ ** directory for licensing information.\endverbatim
  **
  ** \brief quantifier util
  **/
@@ -36,9 +36,10 @@ public:
   static bool getMonomial( Node n, std::map< Node, Node >& msum );
   static bool getMonomialSum( Node n, std::map< Node, Node >& msum );
   static bool getMonomialSumLit( Node lit, std::map< Node, Node >& msum );
+  static Node mkNode( std::map< Node, Node >& msum );
   //return 1 : solved on LHS, return -1 : solved on RHS, return 0: failed
-  static int isolate( Node v, std::map< Node, Node >& msum, Node & veq, Kind k, bool doCoeff = false );
   static int isolate( Node v, std::map< Node, Node >& msum, Node & veq_c, Node & val, Kind k );
+  static int isolate( Node v, std::map< Node, Node >& msum, Node & veq, Kind k, bool doCoeff = false );
   static Node solveEqualityFor( Node lit, Node v );
   static Node negate( Node t );
   static Node offset( Node t, int i );
@@ -92,6 +93,7 @@ public:
   std::map< Node, Node > d_phase_reqs_equality_term;
 
   static void getPolarity( Node n, int child, bool hasPol, bool pol, bool& newHasPol, bool& newPol );
+  static void getEntailPolarity( Node n, int child, bool hasPol, bool pol, bool& newHasPol, bool& newPol );
 };
 
 
@@ -99,8 +101,6 @@ class EqualityQuery {
 public:
   EqualityQuery(){}
   virtual ~EqualityQuery(){};
-  /** reset */
-  virtual void reset() = 0;
   /** contains term */
   virtual bool hasTerm( Node a ) = 0;
   /** get the representative of the equivalence class of a */

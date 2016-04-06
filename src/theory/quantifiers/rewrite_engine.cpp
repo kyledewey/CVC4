@@ -1,13 +1,13 @@
 /*********************                                                        */
 /*! \file rewrite_engine.cpp
  ** \verbatim
- ** Original author: Andrew Reynolds
- ** Major contributors: Morgan Deters
- ** Minor contributors (to current version): none
+ ** Top contributors (to current version):
+ **   Andrew Reynolds, Morgan Deters, Tim King
  ** This file is part of the CVC4 project.
- ** Copyright (c) 2009-2014  New York University and The University of Iowa
- ** See the file COPYING in the top-level source directory for licensing
- ** information.\endverbatim
+ ** Copyright (c) 2009-2016 by the authors listed in the file AUTHORS
+ ** in the top-level source directory) and their institutional affiliations.
+ ** All rights reserved.  See the file COPYING in the top-level source
+ ** directory for licensing information.\endverbatim
  **
  ** \brief Rewrite engine module
  **
@@ -124,12 +124,13 @@ int RewriteEngine::checkRewriteRule( Node f, Theory::Effort e ) {
     std::map< Node, QuantInfo >::iterator it = d_qinfo.find( f );
     if( it!=d_qinfo.end() ){
       QuantInfo * qi = &it->second;
-      if( qi->d_mg->isValid() ){
+      if( qi->matchGeneratorIsValid() ){
         Node rr = TermDb::getRewriteRule( f );
         Trace("rewrite-engine-inst-debug") << "   Reset round..." << std::endl;
         qi->reset_round( qcf );
         Trace("rewrite-engine-inst-debug") << "   Get matches..." << std::endl;
-        while( qi->d_mg->getNextMatch( qcf, qi ) && ( addedLemmas==0 || !options::rrOneInstPerRound() ) ){
+        while( qi->getNextMatch( qcf ) &&
+               ( addedLemmas==0 || !options::rrOneInstPerRound() ) ){
           Trace("rewrite-engine-inst-debug") << "   Got match to complete..." << std::endl;
           qi->debugPrintMatch( "rewrite-engine-inst-debug" );
           std::vector< int > assigned;

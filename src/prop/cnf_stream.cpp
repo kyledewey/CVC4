@@ -1,13 +1,13 @@
 /*********************                                                        */
 /*! \file cnf_stream.cpp
  ** \verbatim
- ** Original author: Tim King
- ** Major contributors: Morgan Deters, Dejan Jovanovic
- ** Minor contributors (to current version): Kshitij Bansal, Liana Hadarean, Christopher L. Conway, Andrew Reynolds
+ ** Top contributors (to current version):
+ **   Dejan Jovanovic, Liana Hadarean, Tim King
  ** This file is part of the CVC4 project.
- ** Copyright (c) 2009-2014  New York University and The University of Iowa
- ** See the file COPYING in the top-level source directory for licensing
- ** information.\endverbatim
+ ** Copyright (c) 2009-2016 by the authors listed in the file AUTHORS
+ ** in the top-level source directory) and their institutional affiliations.
+ ** All rights reserved.  See the file COPYING in the top-level source
+ ** directory for licensing information.\endverbatim
  **
  ** \brief A CNF converter that takes in asserts and has the side effect
  ** of given an equisatisfiable stream of assertions to PropEngine.
@@ -674,7 +674,8 @@ void TseitinCnfStream::convertAndAssert(TNode node,
                                         bool removable,
                                         bool negated,
                                         ProofRule proof_id,
-                                        TNode from) {
+                                        TNode from,
+                                        theory::TheoryId ownerTheory) {
   Debug("cnf") << "convertAndAssert(" << node
                << ", removable = " << (removable ? "true" : "false")
                << ", negated = " << (negated ? "true" : "false") << ")" << endl;
@@ -684,6 +685,7 @@ void TseitinCnfStream::convertAndAssert(TNode node,
       Node assertion = negated ? node.notNode() : (Node)node;
       Node from_assertion = negated? from.notNode() : (Node) from;
 
+      d_cnfProof->setExplainerTheory(ownerTheory);
       if (proof_id != RULE_INVALID) {
         d_cnfProof->pushCurrentAssertion(from.isNull() ? assertion : from_assertion);
         d_cnfProof->registerAssertion(from.isNull() ? assertion : from_assertion, proof_id);
@@ -695,7 +697,10 @@ void TseitinCnfStream::convertAndAssert(TNode node,
     });
 
   convertAndAssert(node, negated);
-  PROOF(if (d_cnfProof) d_cnfProof->popCurrentAssertion(); );
+  PROOF
+    (if (d_cnfProof) {
+      d_cnfProof->popCurrentAssertion();
+    });
 }
 
 void TseitinCnfStream::convertAndAssert(TNode node, bool negated) {

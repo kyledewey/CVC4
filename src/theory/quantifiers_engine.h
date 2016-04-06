@@ -1,13 +1,13 @@
 /*********************                                                        */
 /*! \file quantifiers_engine.h
  ** \verbatim
- ** Original author: Morgan Deters
- ** Major contributors: Andrew Reynolds
- ** Minor contributors (to current version): Francois Bobot
+ ** Top contributors (to current version):
+ **   Andrew Reynolds, Morgan Deters, Tim King
  ** This file is part of the CVC4 project.
- ** Copyright (c) 2009-2014  New York University and The University of Iowa
- ** See the file COPYING in the top-level source directory for licensing
- ** information.\endverbatim
+ ** Copyright (c) 2009-2016 by the authors listed in the file AUTHORS
+ ** in the top-level source directory) and their institutional affiliations.
+ ** All rights reserved.  See the file COPYING in the top-level source
+ ** directory for licensing information.\endverbatim
  **
  ** \brief Theory instantiator, Instantiation Engine classes
  **/
@@ -102,6 +102,7 @@ namespace quantifiers {
   class InstStrategyCegqi;
   class QuantDSplit;
   class QuantAntiSkolem;
+  class EqualityInference;
 }/* CVC4::theory::quantifiers */
 
 namespace inst {
@@ -203,9 +204,11 @@ private:
   std::map< Node, int > d_total_inst_debug;
   std::map< Node, int > d_temp_inst_debug;
   int d_total_inst_count_debug;
-  /** inst round counters */
+  /** inst round counters TODO: make context-dependent? */
+  context::CDO< int > d_ierCounter_c;
   int d_ierCounter;
   int d_ierCounter_lc;
+  int d_ierCounterLastLc;
   int d_inst_when_phase;
   /** has presolve been called */
   context::CDO< bool > d_presolve;
@@ -268,11 +271,12 @@ public:  //modules
 private:
   /** owner of quantified formulas */
   std::map< Node, QuantifiersModule * > d_owner;
+  std::map< Node, int > d_owner_priority;
 public:
   /** get owner */
   QuantifiersModule * getOwner( Node q );
   /** set owner */
-  void setOwner( Node q, QuantifiersModule * m );
+  void setOwner( Node q, QuantifiersModule * m, int priority = 0 );
   /** considers */
   bool hasOwnership( Node q, QuantifiersModule * m = NULL );
 public:
@@ -282,6 +286,8 @@ public:
   void presolve();
   /** check at level */
   void check( Theory::Effort e );
+  /** notify that theories were combined */
+  void notifyCombineTheories();
   /** register quantifier */
   bool registerQuantifier( Node f );
   /** register quantifier */
@@ -346,7 +352,12 @@ public:
   /** get trigger database */
   inst::TriggerTrie* getTriggerDatabase() { return d_tr_trie; }
   /** add term to database */
-  void addTermToDatabase( Node n, bool withinQuant = false, bool withinInstClosure = false );
+  void addTermToDatabase( Node n, bool withinQuant = false, bool withinInstClosure = false );  
+  /** notification when master equality engine is updated */
+  void eqNotifyNewClass(TNode t);
+  void eqNotifyPreMerge(TNode t1, TNode t2);
+  void eqNotifyPostMerge(TNode t1, TNode t2);
+  void eqNotifyDisequal(TNode t1, TNode t2, TNode reason);
   /** get the master equality engine */
   eq::EqualityEngine* getMasterEqualityEngine() ;
   /** debug print equality engine */
@@ -392,6 +403,9 @@ class EqualityQueryQuantifiersEngine : public EqualityQuery
 private:
   /** pointer to theory engine */
   QuantifiersEngine* d_qe;
+  /** quantifiers equality inference */
+  quantifiers::EqualityInference * d_eq_inference;
+  context::CDO< unsigned > d_eqi_counter;
   /** internal representatives */
   std::map< TypeNode, std::map< Node, Node > > d_int_rep;
   /** rep score */
@@ -399,15 +413,17 @@ private:
   /** reset count */
   int d_reset_count;
 
+  /** processInferences : will merge equivalence classes in master equality engine, if possible */
+  bool processInferences( Theory::Effort e );
   /** node contains */
   Node getInstance( Node n, const std::vector< Node >& eqc, std::hash_map<TNode, Node, TNodeHashFunction>& cache );
   /** get score */
   int getRepScore( Node n, Node f, int index, TypeNode v_tn );
 public:
-  EqualityQueryQuantifiersEngine( QuantifiersEngine* qe ) : d_qe( qe ), d_reset_count( 0 ){}
-  ~EqualityQueryQuantifiersEngine(){}
+  EqualityQueryQuantifiersEngine( context::Context* c, QuantifiersEngine* qe );
+  virtual ~EqualityQueryQuantifiersEngine();
   /** reset */
-  void reset();
+  bool reset( Theory::Effort e );
   /** general queries about equality */
   bool hasTerm( Node a );
   Node getRepresentative( Node a );
@@ -422,6 +438,8 @@ public:
   Node getInternalRepresentative( Node a, Node f, int index );
   /** flatten representatives */
   void flattenRepresentatives( std::map< TypeNode, std::vector< Node > >& reps );
+  /** get quantifiers equality inference */
+  quantifiers::EqualityInference * getEqualityInference() { return d_eq_inference; }
 }; /* EqualityQueryQuantifiersEngine */
 
 }/* CVC4::theory namespace */

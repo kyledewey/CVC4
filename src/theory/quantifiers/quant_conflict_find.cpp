@@ -1,13 +1,13 @@
 /*********************                                                        */
 /*! \file quant_conflict_find.cpp
  ** \verbatim
- ** Original author: Andrew Reynolds
- ** Major contributors: none
- ** Minor contributors (to current version): none
+ ** Top contributors (to current version):
+ **   Clark Barrett, Tim King, Andrew Reynolds
  ** This file is part of the CVC4 project.
- ** Copyright (c) 2009-2014  New York University and The University of Iowa
- ** See the file COPYING in the top-level source directory for licensing
- ** information.\endverbatim
+ ** Copyright (c) 2009-2016 by the authors listed in the file AUTHORS
+ ** in the top-level source directory) and their institutional affiliations.
+ ** All rights reserved.  See the file COPYING in the top-level source
+ ** directory for licensing information.\endverbatim
  **
  ** \brief quant conflict find class
  **
@@ -24,14 +24,26 @@
 #include "theory/quantifiers/trigger.h"
 #include "theory/theory_engine.h"
 
-using namespace CVC4;
 using namespace CVC4::kind;
-using namespace CVC4::theory;
-using namespace CVC4::theory::quantifiers;
 using namespace std;
 
 namespace CVC4 {
+namespace theory {
+namespace quantifiers {
 
+QuantInfo::QuantInfo()
+    : d_mg( NULL )
+{}
+
+QuantInfo::~QuantInfo() {
+  delete d_mg;
+  for(std::map< int, MatchGen * >::iterator i = d_var_mg.begin(),
+          iend=d_var_mg.end(); i != iend; ++i) {
+    MatchGen* currentMatchGenerator = (*i).second;
+    delete currentMatchGenerator;
+  }
+  d_var_mg.clear();
+}
 
 
 void QuantInfo::initialize( Node q, Node qn ) {
@@ -843,7 +855,7 @@ MatchGen::MatchGen( QuantInfo * qi, Node n, bool isVar )
       d_qni_size++;
       d_type_not = false;
       d_n = n;
-      //Node f = getOperator( n );
+      //Node f = getMatchOperator( n );
       for( unsigned j=0; j<d_n.getNumChildren(); j++ ){
         Node nn = d_n[j];
         Trace("qcf-qregister-debug") << "  " << d_qni_size;
@@ -1106,7 +1118,7 @@ void MatchGen::reset( QuantConflictFind * p, bool tgt, QuantInfo * qi ) {
     }
   }else if( d_type==typ_var ){
     Assert( isHandledUfTerm( d_n ) );
-    Node f = getOperator( p, d_n );
+    Node f = getMatchOperator( p, d_n );
     Debug("qcf-match-debug") << "       reset: Var will match operators of " << f << std::endl;
     TermArgTrie * qni = p->getTermDatabase()->getTermArgTrie( Node::null(), f );
     if( qni!=NULL ){
@@ -1260,12 +1272,12 @@ bool MatchGen::getNextMatch( QuantConflictFind * p, QuantInfo * qi ) {
         Debug("qcf-match-debug") << "..." << std::endl;
 
         while( ( success && d_binding_it!=d_qni_bound.end() ) || doFail ){
-          std::map< int, MatchGen * >::iterator itm;
+          QuantInfo::VarMgMap::const_iterator itm;
           if( !doFail ){
             Debug("qcf-match-debug") << "       check variable " << d_binding_it->second << std::endl;
-            itm = qi->d_var_mg.find( d_binding_it->second );
+            itm = qi->var_mg_find( d_binding_it->second );
           }
-          if( doFail || ( d_binding_it->first!=0 && itm!=qi->d_var_mg.end() ) ){
+          if( doFail || ( d_binding_it->first!=0 && itm != qi->var_mg_end() ) ){
             Debug("qcf-match-debug") << "       we had bound variable " << d_binding_it->second << ", reset = " << doReset << std::endl;
             if( doReset ){
               itm->second->reset( p, true, qi );
@@ -1279,7 +1291,9 @@ bool MatchGen::getNextMatch( QuantConflictFind * p, QuantInfo * qi ) {
                   --d_binding_it;
                   Debug("qcf-match-debug") << "       decrement..." << std::endl;
                 }
-              }while( success && ( d_binding_it->first==0 || qi->d_var_mg.find( d_binding_it->second )==qi->d_var_mg.end() ) );
+              }while( success &&
+                      ( d_binding_it->first==0 ||
+                        (!qi->containsVarMg(d_binding_it->second))));
               doReset = false;
               doFail = false;
             }else{
@@ -1339,7 +1353,7 @@ bool MatchGen::getNextMatch( QuantConflictFind * p, QuantInfo * qi ) {
       /*
       if( d_type==typ_var && p->d_effort==QuantConflictFind::effort_mc && !d_matched_basis ){
         d_matched_basis = true;
-        Node f = getOperator( d_n );
+        Node f = getMatchOperator( d_n );
         TNode mbo = p->getTermDatabase()->getModelBasisOpTerm( f );
         if( qi->setMatch( p, d_qni_var_num[0], mbo ) ){
           success = true;
@@ -1702,9 +1716,9 @@ bool MatchGen::isHandledUfTerm( TNode n ) {
   return inst::Trigger::isAtomicTriggerKind( n.getKind() );
 }
 
-Node MatchGen::getOperator( QuantConflictFind * p, Node n ) {
+Node MatchGen::getMatchOperator( QuantConflictFind * p, Node n ) {
   if( isHandledUfTerm( n ) ){
-    return p->getTermDatabase()->getOperator( n );
+    return p->getTermDatabase()->getMatchOperator( n );
   }else{
     return Node::null();
   }
@@ -1896,7 +1910,7 @@ void QuantConflictFind::assertNode( Node q ) {
 
 Node QuantConflictFind::evaluateTerm( Node n ) {
   if( MatchGen::isHandledUfTerm( n ) ){
-    Node f = MatchGen::getOperator( this, n );
+    Node f = MatchGen::getMatchOperator( this, n );
     Node nn;
     if( getEqualityEngine()->hasTerm( n ) ){
       nn = getTermDatabase()->existsTerm( f, n );
@@ -2022,7 +2036,7 @@ void QuantConflictFind::check( Theory::Effort level, unsigned quant_e ) {
           QuantInfo * qi = &d_qinfo[q];
 
           Assert( d_qinfo.find( q )!=d_qinfo.end() );
-          if( qi->d_mg->isValid() ){
+          if( qi->matchGeneratorIsValid() ){
             Trace("qcf-check") << "Check quantified formula ";
             debugPrintQuant("qcf-check", q);
             Trace("qcf-check") << " : " << q << "..." << std::endl;
@@ -2031,7 +2045,7 @@ void QuantConflictFind::check( Theory::Effort level, unsigned quant_e ) {
             qi->reset_round( this );
             //try to make a matches making the body false
             Trace("qcf-check-debug") << "Get next match..." << std::endl;
-            while( qi->d_mg->getNextMatch( this, qi ) ){
+            while( qi->getNextMatch( this ) ){
               Trace("qcf-inst") << "*** Produced match at effort " << e << " : " << std::endl;
               qi->debugPrintMatch("qcf-inst");
               Trace("qcf-inst") << std::endl;
@@ -2069,7 +2083,9 @@ void QuantConflictFind::check( Theory::Effort level, unsigned quant_e ) {
                       }
                     }else{
                       Trace("qcf-inst") << "   ... Failed to add instantiation" << std::endl;
-                      //Assert( false );
+                      //this should only happen if the algorithm generates the same propagating instance twice this round
+                      //in this case, break to avoid exponential behavior
+                      break;
                     }
                   }
                   //clean up assigned
@@ -2082,6 +2098,7 @@ void QuantConflictFind::check( Theory::Effort level, unsigned quant_e ) {
                 Trace("qcf-inst") << "   ... Spurious instantiation (match is inconsistent)" << std::endl;
               }
             }
+            Trace("qcf-check") << "Done, conflict = " << d_conflict << std::endl;
             if( d_conflict ){
               break;
             }
@@ -2275,5 +2292,6 @@ TNode QuantConflictFind::getZero( Kind k ) {
   }
 }
 
-
-}
+} /* namespace CVC4::theory::quantifiers */
+} /* namespace CVC4::theory */
+} /* namespace CVC4 */

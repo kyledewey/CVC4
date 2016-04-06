@@ -1,13 +1,13 @@
 /*********************                                                        */
 /*! \file theory_datatypes.cpp
  ** \verbatim
- ** Original author: Morgan Deters
- ** Major contributors: Andrew Reynolds
- ** Minor contributors (to current version): Dejan Jovanovic
+ ** Top contributors (to current version):
+ **   Andrew Reynolds, Morgan Deters, Tim King
  ** This file is part of the CVC4 project.
- ** Copyright (c) 2009-2014  New York University and The University of Iowa
- ** See the file COPYING in the top-level source directory for licensing
- ** information.\endverbatim
+ ** Copyright (c) 2009-2016 by the authors listed in the file AUTHORS
+ ** in the top-level source directory) and their institutional affiliations.
+ ** All rights reserved.  See the file COPYING in the top-level source
+ ** directory for licensing information.\endverbatim
  **
  ** \brief Implementation of the theory of datatypes
  **
@@ -75,6 +75,12 @@ TheoryDatatypes::TheoryDatatypes(Context* c, UserContext* u, OutputChannel& out,
 }
 
 TheoryDatatypes::~TheoryDatatypes() {
+  for(std::map< Node, EqcInfo* >::iterator i = d_eqc_info.begin(), iend = d_eqc_info.end();
+      i != iend; ++i){
+    EqcInfo* current = (*i).second;
+    Assert(current != NULL);
+    delete current;
+  }
 }
 
 void TheoryDatatypes::setMasterEqualityEngine(eq::EqualityEngine* eq) {
@@ -91,7 +97,7 @@ TheoryDatatypes::EqcInfo* TheoryDatatypes::getOrMakeEqcInfo( TNode n, bool doMak
 
       std::map< Node, EqcInfo* >::iterator eqc_i = d_eqc_info.find( n );
       EqcInfo* ei;
-      if( eqc_i!=d_eqc_info.end() ){
+      if( eqc_i != d_eqc_info.end() ){
         ei = eqc_i->second;
       }else{
         ei = new EqcInfo( getSatContext() );
@@ -369,15 +375,23 @@ void TheoryDatatypes::flushPendingFacts(){
         Trace("dt-lemma-debug") << "Trivial explanation." << std::endl;
       }else{
         Trace("dt-lemma-debug") << "Get explanation..." << std::endl;
-        Node ee_exp;
+        std::vector< TNode > assumptions;
         //if( options::dtRExplainLemmas() ){
-          ee_exp = explain( exp );
+        explain( exp, assumptions );
         //}else{
         //  ee_exp = exp;
         //}
-        Trace("dt-lemma-debug") << "Explanation : " << ee_exp << std::endl;
-        lem = NodeManager::currentNM()->mkNode( OR, ee_exp.negate(), fact );
-        lem = Rewriter::rewrite( lem );
+        //Trace("dt-lemma-debug") << "Explanation : " << ee_exp << std::endl;
+        if( assumptions.empty() ){
+          lem = fact;
+        }else{
+          std::vector< Node > children;
+          for( unsigned i=0; i<assumptions.size(); i++ ){
+            children.push_back( assumptions[i].negate() );
+          }
+          children.push_back( fact );
+          lem = NodeManager::currentNM()->mkNode( OR, children );
+        }
       }
       Trace("dt-lemma") << "Datatypes lemma : " << lem << std::endl;
       if( doSendLemma( lem ) ){
@@ -901,10 +915,11 @@ void TheoryDatatypes::eqNotifyDisequal(TNode t1, TNode t2, TNode reason){
 
 }
 
-TheoryDatatypes::EqcInfo::EqcInfo( context::Context* c ) :
-d_inst( c, false ), d_constructor( c, Node::null() ), d_selectors( c, false ){
-
-}
+TheoryDatatypes::EqcInfo::EqcInfo( context::Context* c )
+    : d_inst( c, false )
+    , d_constructor( c, Node::null() )
+    , d_selectors( c, false )
+{}
 
 bool TheoryDatatypes::hasLabel( EqcInfo* eqc, Node n ){
   return ( eqc && !eqc->d_constructor.get().isNull() ) || !getLabel( n ).isNull();
@@ -1934,14 +1949,7 @@ bool TheoryDatatypes::mustCommunicateFact( Node n, Node exp ){
   bool addLemma = false;
   if( options::dtInferAsLemmas() && exp!=d_true ){
     addLemma = true;    
-  }else if( n.getKind()==EQUAL || n.getKind()==IFF ){
-    /*
-    for( unsigned i=0; i<2; i++ ){
-      if( !n[i].isVar() && n[i].getKind()!=APPLY_SELECTOR_TOTAL && n[i].getKind()!=APPLY_CONSTRUCTOR ){
-        addLemma = true;
-      }
-    }
-    */
+  }else if( n.getKind()==EQUAL ){
     TypeNode tn = n[0].getType();
     if( !DatatypesRewriter::isTypeDatatype( tn ) ){
       addLemma = true;
@@ -1949,15 +1957,7 @@ bool TheoryDatatypes::mustCommunicateFact( Node n, Node exp ){
       const Datatype& dt = ((DatatypeType)(tn).toType()).getDatatype();
       addLemma = dt.involvesExternalType();
     }
-    //for( int j=0; j<(int)n[1].getNumChildren(); j++ ){
-    //  if( !DatatypesRewriter::isTermDatatype( n[1][j] ) ){
-    //    addLemma = true;
-    //    break;
-    //  }
-    //}
-  }else if( n.getKind()==LEQ ){
-    addLemma = true;
-  }else if( n.getKind()==OR ){
+  }else if( n.getKind()==LEQ || n.getKind()==IFF || n.getKind()==OR ){
     addLemma = true;
   }
   if( addLemma ){

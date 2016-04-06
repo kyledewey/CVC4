@@ -1,13 +1,13 @@
 /*********************                                                        */
 /*! \file inst_match.h
  ** \verbatim
- ** Original author: Morgan Deters
- ** Major contributors: Andrew Reynolds
- ** Minor contributors (to current version): Francois Bobot
+ ** Top contributors (to current version):
+ **   Andrew Reynolds, Morgan Deters, Tim King
  ** This file is part of the CVC4 project.
- ** Copyright (c) 2009-2014  New York University and The University of Iowa
- ** See the file COPYING in the top-level source directory for licensing
- ** information.\endverbatim
+ ** Copyright (c) 2009-2016 by the authors listed in the file AUTHORS
+ ** in the top-level source directory) and their institutional affiliations.
+ ** All rights reserved.  See the file COPYING in the top-level source
+ ** directory for licensing information.\endverbatim
  **
  ** \brief inst match class
  **/
@@ -96,7 +96,7 @@ public:
   public:
     std::vector< int > d_order;
   };/* class InstMatchTrie ImtIndexOrder */
-public:
+
   /** the data */
   std::map< Node, InstMatchTrie > d_data;
 private:
@@ -141,18 +141,18 @@ public:
 
 /** trie for InstMatch objects */
 class CDInstMatchTrie {
-public:
+private:
   /** the data */
   std::map< Node, CDInstMatchTrie* > d_data;
   /** is valid */
   context::CDO< bool > d_valid;
-private:
+
   void print( std::ostream& out, Node q, std::vector< TNode >& terms ) const;
   void getInstantiations( std::vector< Node >& insts, Node q, std::vector< Node >& terms, QuantifiersEngine * qe ) const;
 public:
   CDInstMatchTrie( context::Context* c ) : d_valid( c, false ){}
-  ~CDInstMatchTrie(){}
-public:
+  ~CDInstMatchTrie();
+
   /** return true if m exists in this trie
         modEq is if we check modulo equality
         modInst is if we return true if m is an instance of a match that exists

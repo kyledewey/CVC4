@@ -1,13 +1,13 @@
 /*********************                                                        */
 /*! \file command.h
  ** \verbatim
- ** Original author: Morgan Deters
- ** Major contributors: none
- ** Minor contributors (to current version): Kshitij Bansal, Christopher L. Conway, Dejan Jovanovic, Francois Bobot, Andrew Reynolds
+ ** Top contributors (to current version):
+ **   Morgan Deters, Andrew Reynolds, Francois Bobot
  ** This file is part of the CVC4 project.
- ** Copyright (c) 2009-2014  New York University and The University of Iowa
- ** See the file COPYING in the top-level source directory for licensing
- ** information.\endverbatim
+ ** Copyright (c) 2009-2016 by the authors listed in the file AUTHORS
+ ** in the top-level source directory) and their institutional affiliations.
+ ** All rights reserved.  See the file COPYING in the top-level source
+ ** directory for licensing information.\endverbatim
  **
  ** \brief Implementation of the command pattern on SmtEngines.
  **
@@ -500,6 +500,24 @@ public:
   Command* clone() const;
   std::string getCommandName() const throw();
 };/* class QueryCommand */
+
+class CVC4_PUBLIC CheckSynthCommand : public Command {
+protected:
+  Expr d_expr;
+  Result d_result;
+  bool d_inUnsatCore;
+public:
+  CheckSynthCommand() throw();
+  CheckSynthCommand(const Expr& expr, bool inUnsatCore = true) throw();
+  ~CheckSynthCommand() throw() {}
+  Expr getExpr() const throw();
+  void invoke(SmtEngine* smtEngine) throw();
+  Result getResult() const throw();
+  void printResult(std::ostream& out, uint32_t verbosity = 2) const throw();
+  Command* exportTo(ExprManager* exprManager, ExprManagerMapCollection& variableMap);
+  Command* clone() const;
+  std::string getCommandName() const throw();
+};/* class CheckSynthCommand */
 
 // this is TRANSFORM in the CVC presentation language
 class CVC4_PUBLIC SimplifyCommand : public Command {

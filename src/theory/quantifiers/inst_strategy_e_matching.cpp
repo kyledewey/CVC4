@@ -1,20 +1,18 @@
 /*********************                                                        */
 /*! \file inst_strategy_e_matching.cpp
  ** \verbatim
- ** Original author: Andrew Reynolds
- ** Major contributors: Morgan Deters
- ** Minor contributors (to current version): none
+ ** Top contributors (to current version):
+ **   Andrew Reynolds, Morgan Deters, Tim King
  ** This file is part of the CVC4 project.
- ** Copyright (c) 2009-2014  New York University and The University of Iowa
- ** See the file COPYING in the top-level source directory for licensing
- ** information.\endverbatim
+ ** Copyright (c) 2009-2016 by the authors listed in the file AUTHORS
+ ** in the top-level source directory) and their institutional affiliations.
+ ** All rights reserved.  See the file COPYING in the top-level source
+ ** directory for licensing information.\endverbatim
  **
  ** \brief Implementation of e matching instantiation strategies
  **/
 
 #include "theory/quantifiers/inst_strategy_e_matching.h"
-
-#include "options/quantifiers_options.h"
 #include "theory/quantifiers/inst_match_generator.h"
 #include "theory/quantifiers/relevant_domain.h"
 #include "theory/quantifiers/term_database.h"
@@ -51,10 +49,12 @@ struct sortQuantifiersForSymbol {
 
 struct sortTriggers {
   bool operator() (Node i, Node j) {
-    if( Trigger::isAtomicTrigger( i ) ){
-      return i<j || !Trigger::isAtomicTrigger( j );
+    int wi = Trigger::getTriggerWeight( i );
+    int wj = Trigger::getTriggerWeight( j );
+    if( wi==wj ){
+      return i<j;
     }else{
-      return i<j && !Trigger::isAtomicTrigger( j );
+      return wi<wj;
     }
   }
 };
@@ -83,7 +83,7 @@ int InstStrategyUserPatterns::process( Node f, Theory::Effort effort, int e ){
       if( d_quantEngine->getInstUserPatMode()==USER_PAT_MODE_RESORT  ){
         int matchOption = 0;
         for( unsigned i=0; i<d_user_gen_wait[f].size(); i++ ){
-          Trigger * t = Trigger::mkTrigger( d_quantEngine, f, d_user_gen_wait[f][i], matchOption, true, Trigger::TR_RETURN_NULL, options::smartTriggers() );
+          Trigger * t = Trigger::mkTrigger( d_quantEngine, f, d_user_gen_wait[f][i], matchOption, true, Trigger::TR_RETURN_NULL );
           if( t ){
             d_user_gen[f].push_back( t );
           }
@@ -132,19 +132,17 @@ void InstStrategyUserPatterns::addUserPattern( Node q, Node pat ){
     if( d_quantEngine->getInstUserPatMode()==USER_PAT_MODE_RESORT ){
       d_user_gen_wait[q].push_back( nodes );
     }else{
-      d_user_gen[q].push_back( Trigger::mkTrigger( d_quantEngine, q, nodes, matchOption, true, Trigger::TR_MAKE_NEW, options::smartTriggers() ) );
+      d_user_gen[q].push_back( Trigger::mkTrigger( d_quantEngine, q, nodes, matchOption, true, Trigger::TR_MAKE_NEW ) );
     }
   }
 }
 
 InstStrategyAutoGenTriggers::InstStrategyAutoGenTriggers( QuantifiersEngine* qe ) : InstStrategy( qe ){
   //how to select trigger terms
-  if( options::triggerSelMode()==TRIGGER_SEL_MIN ){
-    d_tr_strategy = Trigger::TS_MIN_TRIGGER;
-  }else if( options::triggerSelMode()==TRIGGER_SEL_MAX ){
-    d_tr_strategy = Trigger::TS_MAX_TRIGGER;
+  if( options::triggerSelMode()==quantifiers::TRIGGER_SEL_DEFAULT ){
+    d_tr_strategy = quantifiers::TRIGGER_SEL_MIN;
   }else{
-    d_tr_strategy = Trigger::TS_ALL;
+    d_tr_strategy = options::triggerSelMode();
   }
   //whether to select new triggers during the search
   if( options::incrementTriggers() ){
@@ -244,33 +242,36 @@ void InstStrategyAutoGenTriggers::generateTriggers( Node f ){
     d_patTerms[1][f].clear();
     bool ntrivTriggers = options::relationalTriggers();
     std::vector< Node > patTermsF;
+    std::map< Node, int > reqPol;
     //well-defined function: can assume LHS is only trigger
     if( options::quantFunWellDefined() ){
       Node hd = TermDb::getFunDefHead( f );
       if( !hd.isNull() ){
         hd = d_quantEngine->getTermDatabase()->getInstConstantNode( hd, f );
         patTermsF.push_back( hd );
+        reqPol[hd] = 0;
       }
     }
     //otherwise, use algorithm for collecting pattern terms
     if( patTermsF.empty() ){
       Node bd = d_quantEngine->getTermDatabase()->getInstConstantBody( f );
-      Trigger::collectPatTerms( d_quantEngine, f, bd, patTermsF, d_tr_strategy, d_user_no_gen[f], true );
+      Trigger::collectPatTerms( d_quantEngine, f, bd, patTermsF, d_tr_strategy, d_user_no_gen[f], reqPol, true );
       Trace("auto-gen-trigger-debug") << "Collected pat terms for " << bd << ", no-patterns : " << d_user_no_gen[f].size() << std::endl;
-      Trace("auto-gen-trigger-debug") << "   ";
-      for( int i=0; i<(int)patTermsF.size(); i++ ){
-        Trace("auto-gen-trigger-debug") << patTermsF[i] << " ";
-      }
-      Trace("auto-gen-trigger-debug") << std::endl;
       if( ntrivTriggers ){
         sortTriggers st;
         std::sort( patTermsF.begin(), patTermsF.end(), st );
       }
+      for( unsigned i=0; i<patTermsF.size(); i++ ){
+        Assert( reqPol.find( patTermsF[i] )!=reqPol.end() );
+        Trace("auto-gen-trigger-debug") << "   " << patTermsF[i] << " " << reqPol[patTermsF[i]] << std::endl;
+      }
+      Trace("auto-gen-trigger-debug") << std::endl;
     }
-    //sort into single/multi triggers
+    //sort into single/multi triggers, calculate which terms should not be considered
     std::map< Node, std::vector< Node > > varContains;
     std::map< Node, bool > vcMap;
     std::map< Node, bool > rmPatTermsF;
+    int last_weight = -1;
     for( unsigned i=0; i<patTermsF.size(); i++ ){
       d_quantEngine->getTermDatabase()->getVarContainsNode( f, patTermsF[i], varContains[ patTermsF[i] ] );
       bool newVar = false;
@@ -280,19 +281,36 @@ void InstStrategyAutoGenTriggers::generateTriggers( Node f ){
           newVar = true;
         }
       }
-      if( ntrivTriggers && !newVar && !Trigger::isAtomicTrigger( patTermsF[i] ) ){
-        Trace("auto-gen-trigger-debug") << "Exclude expendible non-trivial trigger : " << patTermsF[i] << std::endl;
+      int curr_w = Trigger::getTriggerWeight( patTermsF[i] );
+      if( ntrivTriggers && !newVar && last_weight!=-1 && curr_w>last_weight ){
+        Trace("auto-gen-trigger-debug") << "...exclude expendible non-trivial trigger : " << patTermsF[i] << std::endl;
         rmPatTermsF[patTermsF[i]] = true;
+      }else{
+        last_weight = curr_w;
       }
     }
     for( std::map< Node, std::vector< Node > >::iterator it = varContains.begin(); it != varContains.end(); ++it ){
-      if( rmPatTermsF.find( it->first )==rmPatTermsF.end() ){
-        if( it->second.size()==f[0].getNumChildren() && ( options::pureThTriggers() || !Trigger::isPureTheoryTrigger( it->first ) ) ){
-          d_patTerms[0][f].push_back( it->first );
-          d_is_single_trigger[ it->first ] = true;
+      Node pat = it->first;
+      Trace("auto-gen-trigger-debug") << "...processing pattern " << pat << std::endl;
+      if( rmPatTermsF.find( pat )==rmPatTermsF.end() ){
+        //process the pattern: if it has a required polarity, consider it
+        if( options::instNoEntail() ){
+          Assert( reqPol.find( pat )!=reqPol.end() );
+          int rpol = reqPol[pat];
+          Trace("auto-gen-trigger-debug") << "...required polarity for " << pat << " is " << rpol << std::endl;
+          if( rpol!=0 ){
+            Assert( pat.getType().isBoolean() );
+            if( pat.getKind()==APPLY_UF ){
+              pat = NodeManager::currentNM()->mkNode( IFF, pat, NodeManager::currentNM()->mkConst( rpol==-1 ) ).negate();
+            }
+          }
+        }
+        if( it->second.size()==f[0].getNumChildren() && ( options::pureThTriggers() || !Trigger::isPureTheoryTrigger( pat ) ) ){
+          d_patTerms[0][f].push_back( pat );
+          d_is_single_trigger[ pat ] = true;
         }else{
-          d_patTerms[1][f].push_back( it->first );
-          d_is_single_trigger[ it->first ] = false;
+          d_patTerms[1][f].push_back( pat );
+          d_is_single_trigger[ pat ] = false;
         }
       }
     }
@@ -327,7 +345,7 @@ void InstStrategyAutoGenTriggers::generateTriggers( Node f ){
         //sort based on # occurrences (this will cause Trigger to select rarer symbols)
         std::sort( patTerms.begin(), patTerms.end(), sqfs );
         Debug("relevant-trigger") << "Terms based on relevance: " << std::endl;
-        for( int i=0; i<(int)patTerms.size(); i++ ){
+        for( unsigned i=0; i<patTerms.size(); i++ ){
           Debug("relevant-trigger") << "   " << patTerms[i] << " (";
           Debug("relevant-trigger") << d_quantEngine->getQuantifierRelevance()->getNumQuantifiersForSymbol( patTerms[i].getOperator() ) << ")" << std::endl;
         }
@@ -336,7 +354,7 @@ void InstStrategyAutoGenTriggers::generateTriggers( Node f ){
       int matchOption = 0;
       Trigger* tr = NULL;
       if( d_is_single_trigger[ patTerms[0] ] ){
-        tr = Trigger::mkTrigger( d_quantEngine, f, patTerms[0], matchOption, false, Trigger::TR_RETURN_NULL, options::smartTriggers() );
+        tr = Trigger::mkTrigger( d_quantEngine, f, patTerms[0], matchOption, false, Trigger::TR_RETURN_NULL );
         d_single_trigger_gen[ patTerms[0] ] = true;
       }else{
         //only generate multi trigger if option set, or if no single triggers exist
@@ -354,7 +372,7 @@ void InstStrategyAutoGenTriggers::generateTriggers( Node f ){
           d_made_multi_trigger[f] = true;
         }
         //will possibly want to get an old trigger
-        tr = Trigger::mkTrigger( d_quantEngine, f, patTerms, matchOption, false, Trigger::TR_GET_OLD, options::smartTriggers() );
+        tr = Trigger::mkTrigger( d_quantEngine, f, patTerms, matchOption, false, Trigger::TR_GET_OLD );
       }
       if( tr ){
         unsigned tindex;
@@ -390,7 +408,7 @@ void InstStrategyAutoGenTriggers::generateTriggers( Node f ){
               if( !options::relevantTriggers() ||
                   d_quantEngine->getQuantifierRelevance()->getNumQuantifiersForSymbol( patTerms[index].getOperator() )<=nqfs_curr ){
                 d_single_trigger_gen[ patTerms[index] ] = true;
-                Trigger* tr2 = Trigger::mkTrigger( d_quantEngine, f, patTerms[index], matchOption, false, Trigger::TR_RETURN_NULL, options::smartTriggers() );
+                Trigger* tr2 = Trigger::mkTrigger( d_quantEngine, f, patTerms[index], matchOption, false, Trigger::TR_RETURN_NULL );
                 if( tr2 ){
                   //Notice() << "Add additional trigger " << patTerms[index] << std::endl;
                   tr2->resetInstantiationRound();
@@ -462,7 +480,7 @@ bool InstStrategyLocalTheoryExt::isLocalTheoryExt( Node f ) {
       }
       Trace("local-t-ext") << std::endl;
       int matchOption = 0;
-      Trigger * tr = Trigger::mkTrigger( d_quantEngine, f, patTerms, matchOption, true, Trigger::TR_GET_OLD, options::smartTriggers() );
+      Trigger * tr = Trigger::mkTrigger( d_quantEngine, f, patTerms, matchOption, true, Trigger::TR_GET_OLD );
       d_lte_trigger[f] = tr;
     }else{
       Trace("local-t-ext") << "No local theory extensions trigger for " << f << "." << std::endl;

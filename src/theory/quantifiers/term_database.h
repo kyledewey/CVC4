@@ -1,13 +1,13 @@
 /*********************                                                        */
 /*! \file term_database.h
  ** \verbatim
- ** Original author: Andrew Reynolds
- ** Major contributors: Morgan Deters
- ** Minor contributors (to current version): Tim King
+ ** Top contributors (to current version):
+ **   Andrew Reynolds, Morgan Deters, Tim King
  ** This file is part of the CVC4 project.
- ** Copyright (c) 2009-2014  New York University and The University of Iowa
- ** See the file COPYING in the top-level source directory for licensing
- ** information.\endverbatim
+ ** Copyright (c) 2009-2016 by the authors listed in the file AUTHORS
+ ** in the top-level source directory) and their institutional affiliations.
+ ** All rights reserved.  See the file COPYING in the top-level source
+ ** directory for licensing information.\endverbatim
  **
  ** \brief term database class
  **/
@@ -71,6 +71,9 @@ typedef expr::Attribute<InstVarNumAttributeId, uint64_t> InstVarNumAttribute;
 struct TermDepthAttributeId {};
 typedef expr::Attribute<TermDepthAttributeId, uint64_t> TermDepthAttribute;
 
+struct ContainsUConstAttributeId {};
+typedef expr::Attribute<ContainsUConstAttributeId, uint64_t> ContainsUConstAttribute;
+
 struct ModelBasisAttributeId {};
 typedef expr::Attribute<ModelBasisAttributeId, bool> ModelBasisAttribute;
 //for APPLY_UF terms, 1 : term has direct child with model basis attribute,
@@ -123,6 +126,8 @@ public:
   /** the data */
   std::map< TNode, TermArgTrie > d_data;
 public:
+  bool hasNodeData() { return !d_data.empty(); }
+  TNode getNodeData() { return d_data.begin()->first; }
   TNode existsTerm( std::vector< TNode >& reps, int argIndex = 0 );
   TNode addOrGetTerm( TNode n, std::vector< TNode >& reps, int argIndex = 0 );
   bool addTerm( TNode n, std::vector< TNode >& reps, int argIndex = 0 );
@@ -133,9 +138,10 @@ public:
 
 class QAttributes{
 public:
-  QAttributes() : d_conjecture(false), d_axiom(false), d_sygus(false),
+  QAttributes() : d_hasPattern(false), d_conjecture(false), d_axiom(false), d_sygus(false),
                   d_synthesis(false), d_rr_priority(-1), d_qinstLevel(-1), d_quant_elim(false), d_quant_elim_partial(false){}
   ~QAttributes(){}
+  bool d_hasPattern;
   Node d_rr;
   bool d_conjecture;
   bool d_axiom;
@@ -171,8 +177,14 @@ private:
   std::hash_set< Node, NodeHashFunction > d_iclosure_processed;
   /** select op map */
   std::map< Node, std::map< TypeNode, Node > > d_par_op_map;
+  /** whether master equality engine is UF-inconsistent */
+  bool d_consistent_ee;
   /** set has term */
   void setHasTerm( Node n );
+  /** evaluate term */
+  TNode evaluateTerm2( TNode n, std::map< TNode, TNode >& subs, bool subsRep, bool hasSubs );
+  Node evaluateTerm2( TNode n, std::map< TNode, TNode >& subs, bool subsRep, bool hasSubs, std::map< TNode, Node >& visited );
+  bool isEntailed( TNode n, std::map< TNode, TNode >& subs, bool subsRep, bool hasSubs, bool pol );
 public:
   TermDb( context::Context* c, context::UserContext* u, QuantifiersEngine* qe );
   ~TermDb(){}
@@ -187,7 +199,6 @@ public:
   std::map< Node, std::vector< Node > > d_op_map;
   /** map from type nodes to terms of that type */
   std::map< TypeNode, std::vector< Node > > d_type_map;
-
 
   /** count number of non-redundant ground terms per operator */
   std::map< Node, int > d_op_nonred_count;
@@ -211,9 +222,9 @@ public:
   /** presolve (called once per user check-sat) */
   void presolve();
   /** reset (calculate which terms are active) */
-  void reset( Theory::Effort effort );
-  /** get operator*/
-  Node getOperator( Node n );
+  bool reset( Theory::Effort effort );
+  /** get match operator */
+  Node getMatchOperator( Node n );
   /** get term arg index */
   TermArgTrie * getTermArgTrie( Node f );
   TermArgTrie * getTermArgTrie( Node eqc, Node f );
@@ -226,9 +237,9 @@ public:
   /** evaluate a term under a substitution.  Return representative in EE if possible.
    * subsRep is whether subs contains only representatives
    */
-  TNode evaluateTerm( TNode n, std::map< TNode, TNode >& subs, bool subsRep );
+  Node evaluateTerm( TNode n, std::map< TNode, TNode >& subs, bool subsRep, bool mkNewTerms = false );
   /** same as above, but without substitution */
-  TNode evaluateTerm( TNode n );
+  Node evaluateTerm( TNode n, bool mkNewTerms = false );
   /** is entailed (incomplete check) */
   bool isEntailed( TNode n, std::map< TNode, TNode >& subs, bool subsRep, bool pol );
   /** has term */
@@ -350,26 +361,26 @@ public:
 //for triggers
 private:
   /** helper function for compute var contains */
-  void computeVarContains2( Node n, std::vector< Node >& varContains, std::map< Node, bool >& visited );
+  static void computeVarContains2( Node n, std::vector< Node >& varContains, std::map< Node, bool >& visited );
   /** triggers for each operator */
   std::map< Node, std::vector< inst::Trigger* > > d_op_triggers;
   /** helper for is instance of */
-  bool isUnifiableInstanceOf( Node n1, Node n2, std::map< Node, Node >& subs );
+  static bool isUnifiableInstanceOf( Node n1, Node n2, std::map< Node, Node >& subs );
   /** -1: n1 is an instance of n2, 1: n1 is an instance of n2 */
-  int isInstanceOf2( Node n1, Node n2, std::vector< Node >& varContains1, std::vector< Node >& varContains2 );
+  static int isInstanceOf2( Node n1, Node n2, std::vector< Node >& varContains1, std::vector< Node >& varContains2 );
 public:
   /** compute var contains */
-  void computeVarContains( Node n, std::vector< Node >& varContains );
+  static void computeVarContains( Node n, std::vector< Node >& varContains );
   /** get var contains for each of the patterns in pats */
-  void getVarContains( Node f, std::vector< Node >& pats, std::map< Node, std::vector< Node > >& varContains );
+  static void getVarContains( Node f, std::vector< Node >& pats, std::map< Node, std::vector< Node > >& varContains );
   /** get var contains for node n */
-  void getVarContainsNode( Node f, Node n, std::vector< Node >& varContains );
+  static void getVarContainsNode( Node f, Node n, std::vector< Node >& varContains );
+  /** -1: n1 is an instance of n2, 1: n1 is an instance of n2 */
+  static int isInstanceOf( Node n1, Node n2 );
+  /** filter all nodes that have instances */
+  static void filterInstances( std::vector< Node >& nodes );
   /** register trigger (for eager quantifier instantiation) */
   void registerTrigger( inst::Trigger* tr, Node op );
-  /** -1: n1 is an instance of n2, 1: n1 is an instance of n2 */
-  int isInstanceOf( Node n1, Node n2 );
-  /** filter all nodes that have instances */
-  void filterInstances( std::vector< Node >& nodes );
 
 //for term ordering
 private:
@@ -430,7 +441,6 @@ private:
   //helper for contains term
   static bool containsTerm2( Node n, Node t, std::map< Node, bool >& visited );
   static bool containsTerms2( Node n, std::vector< Node >& t, std::map< Node, bool >& visited );
-  static bool containsUninterpretedConstant2( Node n, std::map< Node, bool >& visited );
 //general utilities
 public:
   /** simple check for whether n contains t as subterm */
