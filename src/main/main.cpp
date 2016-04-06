@@ -177,7 +177,7 @@ void read_files(CVC4SessionFactory& sessionFactory,
 
 int main(int argc, char** argv) {
   Options options;
-  options.parseOptions(argc, argv);
+  Options::parseOptions(&options, argc, argv);
   options.setInputLanguage(language::input::LANG_SMTLIB_V2_0);
   options.setOutputLanguage(language::output::LANG_SMTLIB_V2_0);
 
