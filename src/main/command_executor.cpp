@@ -55,6 +55,8 @@ CommandExecutor::CommandExecutor(ExprManager &exprMgr, Options &options) :
   d_options(options),
   d_stats("driver"),
   d_result() {
+  d_smtEngine->setOption("check-models", SExpr("true"));
+  d_smtEngine->setOption("produce-models", SExpr("true"));
 }
 
 bool CommandExecutor::doCommand(Command* cmd)
