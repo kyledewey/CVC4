@@ -39,7 +39,6 @@ Smt2::Smt2(ExprManager* exprManager, Input* input, bool strictMode, bool parseOn
   if( !strictModeEnabled() ) {
     addTheory(Smt2::THEORY_CORE);
   }
-  //setLogic("ALL_SUPPORTED");
 }
 
 void Smt2::setLanguage(InputLanguage lang) {
