@@ -2058,7 +2058,6 @@ void TheoryArrays::queueRowLemma(RowLemmaType lem)
   // TODO: maybe add triggers here
 
   if ((options::arraysEagerLemmas() || bothExist) && !d_proofsEnabled) {
-
     // Make sure that any terms introduced by rewriting are appropriately stored in the equality database
     Node aj2 = Rewriter::rewrite(aj);
     if (aj != aj2) {
@@ -2188,6 +2187,7 @@ bool TheoryArrays::dischargeLemmas()
         preRegisterTermInternal(bj2);
       }
       d_equalityEngine.assertEquality(bj.eqNode(bj2), true, d_true);
+
     }
     if (aj2 == bj2) {
       continue;

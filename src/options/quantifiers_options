@@ -174,6 +174,9 @@ option qcfAllConflict --qcf-all-conflict bool :read-write :default false
 
 option instNoEntail --inst-no-entail bool :read-write :default true
  do not consider instances of quantified formulas that are currently entailed
+
+option instPropagate --inst-propagate bool :read-write :default false
+ internal propagation for instantiations for selecting relevant instances
  
 ### rewrite rules options 
  
@@ -207,6 +210,8 @@ option conjectureGenGtEnum --conjecture-gen-gt-enum=N int :default 50
  number of ground terms to generate for model filtering
 option conjectureUeeIntro --conjecture-gen-uee-intro bool :default false
  more aggressive merging for universal equality engine, introduces terms
+option conjectureGenMaxDepth --conjecture-gen-max-depth=N int :default 3
+ maximum depth of terms to consider for conjectures
   
 ### synthesis options 
 

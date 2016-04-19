@@ -159,7 +159,7 @@ bool AbsDef::addInstantiations( FirstOrderModelAbs * m, QuantifiersEngine * qe, 
       return true;
     }else{
       if( depth==q[0].getNumChildren() ){
-        if( qe->addInstantiation( q, terms ) ){
+        if( qe->addInstantiation( q, terms, true ) ){
           Trace("ambqi-inst-debug") << "-> Added instantiation." << std::endl;
           inst++;
           return true;
@@ -190,7 +190,7 @@ bool AbsDef::addInstantiations( FirstOrderModelAbs * m, QuantifiersEngine * qe, 
                 success = true;
               }
             }
-          }while( !success && index<32 );
+          }while( !qe->inConflict() && !success && index<32 );
           //mark if we are incomplete
           osuccess = osuccess && success;
         }

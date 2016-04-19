@@ -82,8 +82,9 @@ RelevantDomain::RDomain * RelevantDomain::getRDomain( Node n, int i, bool getPar
   return getParent ? d_rel_doms[n][i]->getParent() : d_rel_doms[n][i];
 }
 
-void RelevantDomain::reset(){
+bool RelevantDomain::reset( Theory::Effort e ) {
   d_is_computed = false;
+  return true;
 }
 
 void RelevantDomain::compute(){
@@ -94,7 +95,7 @@ void RelevantDomain::compute(){
         it2->second->reset();
       }
     }
-    for( int i=0; i<d_model->getNumAssertedQuantifiers(); i++ ){
+    for( unsigned i=0; i<d_model->getNumAssertedQuantifiers(); i++ ){
       Node q = d_model->getAssertedQuantifier( i );
       Node icf = d_qe->getTermDatabase()->getInstConstantBody( q );
       Trace("rel-dom-debug") << "compute relevant domain for " << icf << std::endl;

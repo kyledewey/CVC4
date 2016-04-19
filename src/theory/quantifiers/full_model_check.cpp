@@ -350,11 +350,11 @@ void FullModelChecker::preProcessBuildModel(TheoryModel* m, bool fullModel) {
     }
     //do not have to introduce terms for sorts of domains of quantified formulas if we are allowed to assume empty sorts
     if( !options::fmfEmptySorts() ){
-      for( int i=0; i<fm->getNumAssertedQuantifiers(); i++ ){
+      for( unsigned i=0; i<fm->getNumAssertedQuantifiers(); i++ ){
         Node q = fm->getAssertedQuantifier( i );
         //make sure all types are set
-        for( unsigned i=0; i<q[0].getNumChildren(); i++ ){
-          preInitializeType( fm, q[0][i].getType() );
+        for( unsigned j=0; j<q[0].getNumChildren(); j++ ){
+          preInitializeType( fm, q[0][j].getType() );
         }
       }
     }
@@ -591,6 +591,7 @@ void FullModelChecker::debugPrint(const char * tr, Node n, bool dispStar) {
 
 bool FullModelChecker::doExhaustiveInstantiation( FirstOrderModel * fm, Node f, int effort ) {
   Trace("fmc") << "Full model check " << f << ", effort = " << effort << "..." << std::endl;
+  Assert( !d_qe->inConflict() );
   if( optUseModel() ){
     FirstOrderModelFmc * fmfmc = fm->asFirstOrderModelFmc();
     if (effort==0) {
@@ -681,10 +682,10 @@ bool FullModelChecker::doExhaustiveInstantiation( FirstOrderModel * fm, Node f, 
               }else{
                 //just add the instance
                 d_triedLemmas++;
-                if( d_qe->addInstantiation( f, inst ) ){
+                if( d_qe->addInstantiation( f, inst, true ) ){
                   Trace("fmc-debug-inst") << "** Added instantiation." << std::endl;
                   d_addedLemmas++;
-                  if( options::fmfOneInstPerRound() ){
+                  if( d_qe->inConflict() || options::fmfOneInstPerRound() ){
                     break;
                   }
                 }else{
@@ -809,10 +810,10 @@ bool FullModelChecker::exhaustiveInstantiate(FirstOrderModelFmc * fm, Node f, No
       if (ev!=d_true) {
         Trace("fmc-exh-debug") << ", add!";
         //add as instantiation
-        if( d_qe->addInstantiation( f, inst ) ){
+        if( d_qe->addInstantiation( f, inst, true ) ){
           Trace("fmc-exh-debug")  << " ...success.";
           addedLemmas++;
-          if( options::fmfOneInstPerRound() ){
+          if( d_qe->inConflict() || options::fmfOneInstPerRound() ){
             break;
           }
         }else{
